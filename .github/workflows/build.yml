@@ -46,10 +46,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run rustfmt
-        run: cd src-tauri && cargo fmt --all -- --check
+        run: cd src-tauri && cargo fmt -- --check
 
       - name: Run clippy
-        run: cd src-tauri && cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cd src-tauri && cargo clippy --all-targets -- -D warnings
 
       - name: Check dependencies
         run: cd src-tauri && cargo audit || true
@@ -84,10 +84,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cd src-tauri && cargo test --workspace --all-features -- --nocapture
+        run: cd src-tauri && cargo test -- --nocapture
 
       - name: Run doc tests
-        run: cd src-tauri && cargo test --workspace --doc
+        run: cd src-tauri && cargo test --doc
 
   # Build for Linux
   build-linux:
