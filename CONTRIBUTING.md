@@ -40,7 +40,29 @@ cd ClawStation
 git remote add upstream https://github.com/NextDoorLaoHuang-HF/ClawStation.git
 ```
 
-#### 2. 创建分支
+#### 2. 开发前检查
+
+在推送代码前，**必须**运行完整检查：
+
+```bash
+# 运行所有检查（前端 + 后端）
+npm run check
+
+# 或手动运行
+./scripts/pre-push-check.sh
+```
+
+此脚本会自动运行：
+- ✅ TypeScript 类型检查
+- ✅ ESLint 代码检查
+- ✅ 前端单元测试
+- ✅ Rust 格式化检查
+- ✅ Clippy 静态分析
+- ✅ Rust 单元测试
+
+**如果检查失败，推送将被阻止。**
+
+#### 3. 创建分支
 
 ```bash
 git checkout -b feature/your-feature-name
