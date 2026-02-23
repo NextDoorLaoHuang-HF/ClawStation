@@ -44,10 +44,11 @@ export const CanvasPanel: React.FC = () => {
     console.log('Eval JavaScript in canvas');
   };
 
-  // 截图
+  // 截图功能 (开发中)
   const handleSnapshot = () => {
-    // TODO: 调用 Tauri API 截图
-    console.log('Take canvas snapshot');
+    // Canvas 截图功能需要 WebView 支持，当前标记为开发中
+    console.log('Canvas snapshot - development in progress');
+    alert('Canvas 截图功能开发中...');
   };
 
   return (
