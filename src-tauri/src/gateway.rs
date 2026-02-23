@@ -2,6 +2,8 @@
 
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex, RwLock};
@@ -9,6 +11,170 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 use uuid::Uuid;
 
 use crate::AppState;
+
+// ============== Gateway Profile Types ==============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayProfile {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    pub token: Option<String>,
+    #[serde(default = "default_canvas_port")]
+    pub canvas_port: u16,
+    #[serde(default)]
+    pub is_default: bool,
+}
+
+fn default_canvas_port() -> u16 {
+    18793
+}
+
+impl Default for GatewayProfile {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            name: "Default Gateway".to_string(),
+            url: "ws://127.0.0.1:18789".to_string(),
+            token: None,
+            canvas_port: 18793,
+            is_default: true,
+        }
+    }
+}
+
+// ============== Config Storage ==============
+
+fn get_config_dir() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("openclaw")
+        .join("clawstation")
+}
+
+fn get_profiles_path() -> PathBuf {
+    get_config_dir().join("gateway_profiles.json")
+}
+
+fn load_profiles() -> Vec<GatewayProfile> {
+    let path = get_profiles_path();
+    if path.exists() {
+        if let Ok(data) = fs::read_to_string(&path) {
+            if let Ok(profiles) = serde_json::from_str(&data) {
+                return profiles;
+            }
+        }
+    }
+    // Return default profile if no config exists
+    vec![GatewayProfile::default()]
+}
+
+fn save_profiles(profiles: &[GatewayProfile]) -> Result<(), String> {
+    let path = get_profiles_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let data = serde_json::to_string_pretty(profiles).map_err(|e| e.to_string())?;
+    fs::write(&path, data).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ============== Profile Commands ==============
+
+#[tauri::command]
+pub fn list_gateway_profiles() -> Vec<GatewayProfile> {
+    load_profiles()
+}
+
+#[tauri::command]
+pub fn add_gateway_profile(profile: GatewayProfile) -> Result<GatewayProfile, String> {
+    let mut profiles = load_profiles();
+
+    // If this is the first profile or marked as default, set as default
+    let is_first = profiles.is_empty();
+    let mut new_profile = profile;
+    if new_profile.id.is_empty() {
+        new_profile.id = Uuid::new_v4().to_string();
+    }
+    if is_first || new_profile.is_default {
+        // Clear other defaults
+        for p in &mut profiles {
+            p.is_default = false;
+        }
+        new_profile.is_default = true;
+    }
+
+    profiles.push(new_profile.clone());
+    save_profiles(&profiles)?;
+
+    tracing::info!("Added gateway profile: {}", new_profile.name);
+    Ok(new_profile)
+}
+
+#[tauri::command]
+pub fn update_gateway_profile(profile: GatewayProfile) -> Result<GatewayProfile, String> {
+    let mut profiles = load_profiles();
+
+    if let Some(existing) = profiles.iter_mut().find(|p| p.id == profile.id) {
+        *existing = profile.clone();
+
+        // If marked as default, clear others
+        if profile.is_default {
+            for p in &mut profiles {
+                if p.id != profile.id {
+                    p.is_default = false;
+                }
+            }
+        }
+
+        save_profiles(&profiles)?;
+        tracing::info!("Updated gateway profile: {}", profile.name);
+        Ok(profile)
+    } else {
+        Err("Profile not found".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn remove_gateway_profile(id: String) -> Result<(), String> {
+    let mut profiles = load_profiles();
+    let initial_len = profiles.len();
+    profiles.retain(|p| p.id != id);
+
+    if profiles.len() == initial_len {
+        return Err("Profile not found".to_string());
+    }
+
+    // If we removed the default, make another one default
+    if !profiles.iter().any(|p| p.is_default) {
+        if let Some(first) = profiles.first_mut() {
+            first.is_default = true;
+        }
+    }
+
+    save_profiles(&profiles)?;
+    tracing::info!("Removed gateway profile: {}", id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_default_gateway(id: String) -> Result<(), String> {
+    let mut profiles = load_profiles();
+
+    for p in &mut profiles {
+        p.is_default = p.id == id;
+    }
+
+    save_profiles(&profiles)?;
+    tracing::info!("Set default gateway profile: {}", id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_default_gateway_profile() -> Option<GatewayProfile> {
+    let profiles = load_profiles();
+    profiles.into_iter().find(|p| p.is_default)
+}
 
 // ============== Types ==============
 
@@ -24,10 +190,6 @@ pub struct GatewayConfig {
 
 fn default_agent_id() -> String {
     "main".to_string()
-}
-
-fn default_canvas_port() -> u16 {
-    18793
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

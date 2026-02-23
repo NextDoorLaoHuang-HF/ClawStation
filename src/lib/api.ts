@@ -2,29 +2,50 @@
 // Version: 1.0.0
 // Generated: 2026-02-23
 
-// 注意：Tauri API 将在后端实现后启用
-// import { invoke } from '@tauri-apps/api/core';
-// import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 import type * as types from '../types';
+import type { GatewayProfile } from '../types/gateway';
 
-// Mock invoke 函数 - 导出以便测试时可以 mock
+// Mock invoke function for development - use real invoke in production
 export const tauriInvoke = async <T>(_command: string, _args?: Record<string, unknown>): Promise<T> => {
+  // TODO: Enable real Tauri backend
+  // return invoke<T>(_command, _args);
   throw new Error('Tauri backend not implemented yet');
 };
 
 // ============================================
-// Gateway API
+// Gateway API (Profile Management)
 // ============================================
 
 export const gateway = {
+  // Profile management
+  listProfiles: (): Promise<GatewayProfile[]> =>
+    invoke<GatewayProfile[]>('list_gateway_profiles'),
+  
+  addProfile: (profile: Omit<GatewayProfile, 'id'>): Promise<GatewayProfile> =>
+    invoke<GatewayProfile>('add_gateway_profile', { profile: { ...profile, id: '' } }),
+  
+  updateProfile: (profile: GatewayProfile): Promise<GatewayProfile> =>
+    invoke<GatewayProfile>('update_gateway_profile', { profile }),
+  
+  removeProfile: (id: string): Promise<void> =>
+    invoke('remove_gateway_profile', { id }),
+  
+  setDefault: (id: string): Promise<void> =>
+    invoke('set_default_gateway', { id }),
+  
+  getDefault: (): Promise<GatewayProfile | null> =>
+    invoke<GatewayProfile | null>('get_default_gateway_profile'),
+  
+  // Connection
   connect: (config: types.GatewayConfig): Promise<void> => 
-    tauriInvoke('connect', { config }),
+    invoke('connect', { config }),
   
   disconnect: (): Promise<void> => 
-    tauriInvoke('disconnect'),
+    invoke('disconnect'),
   
   getStatus: (): Promise<types.GatewayStatus> => 
-    tauriInvoke('get_status'),
+    invoke('get_status'),
 };
 
 // ============================================

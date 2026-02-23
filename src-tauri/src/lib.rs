@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 pub use agents::AgentInfo;
 pub use canvas::CanvasState;
 pub use files::FileInfo;
-pub use gateway::{GatewayConfig, GatewayStatus};
+pub use gateway::{GatewayConfig, GatewayProfile, GatewayStatus};
 pub use plugins::{create_plugin_manager, PluginInfo, PluginManagerState};
 pub use sessions::Session;
 
@@ -58,6 +58,12 @@ pub fn run() {
             gateway::connect,
             gateway::disconnect,
             gateway::get_status,
+            gateway::list_gateway_profiles,
+            gateway::add_gateway_profile,
+            gateway::update_gateway_profile,
+            gateway::remove_gateway_profile,
+            gateway::set_default_gateway,
+            gateway::get_default_gateway_profile,
             // Sessions
             sessions::list_sessions,
             sessions::get_history,
