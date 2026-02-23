@@ -13,7 +13,10 @@ pub async fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>,
 
 /// Install a plugin from a source (local path or URL)
 #[tauri::command]
-pub async fn install_plugin(source: String, state: State<'_, AppState>) -> Result<PluginInfo, String> {
+pub async fn install_plugin(
+    source: String,
+    state: State<'_, AppState>,
+) -> Result<PluginInfo, String> {
     let mut manager = state.plugins.write().await;
     manager.install(&source).await
 }

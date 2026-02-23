@@ -51,7 +51,7 @@ impl AllowedApis {
             post_message: true,
         }
     }
-    
+
     /// All APIs allowed (for trusted plugins)
     pub fn all_allowed() -> Self {
         Self {
@@ -127,7 +127,7 @@ impl PluginSandbox {
             trusted: false,
         }
     }
-    
+
     /// Create a sandbox for a trusted plugin
     pub fn trusted(permissions: PluginPermissions) -> Self {
         Self {
@@ -138,33 +138,33 @@ impl PluginSandbox {
             trusted: true,
         }
     }
-    
+
     /// Get the runtime type
     pub fn runtime(&self) -> &SandboxRuntime {
         &self.runtime
     }
-    
+
     /// Get allowed APIs
     pub fn allowed_apis(&self) -> &AllowedApis {
         &self.allowed_apis
     }
-    
+
     /// Get resource limits
     pub fn limits(&self) -> &ResourceLimits {
         &self.limits
     }
-    
+
     /// Get permissions
     pub fn permissions(&self) -> &PluginPermissions {
         &self.permissions
     }
-    
+
     /// Check if an API is allowed
     pub fn is_api_allowed(&self, api: &str) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         match api {
             "console" => self.allowed_apis.console,
             "fetch" => self.allowed_apis.fetch,
@@ -178,34 +178,34 @@ impl PluginSandbox {
             _ => false,
         }
     }
-    
+
     /// Check if a domain is allowed for network requests
     pub fn is_domain_allowed(&self, domain: &str) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(network) = &self.permissions.network {
             if let Some(domains) = &network.domains {
                 if domains.is_empty() {
                     return false;
                 }
-                return domains.iter().any(|d| {
-                    domain == d || domain.ends_with(&format!(".{}", d))
-                });
+                return domains
+                    .iter()
+                    .any(|d| domain == d || domain.ends_with(&format!(".{}", d)));
             }
         }
-        
+
         // No network permissions = no network access
         false
     }
-    
+
     /// Check if a filesystem path is allowed for reading
     pub fn is_read_allowed(&self, path: &str) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(fs) = &self.permissions.filesystem {
             if !fs.read {
                 return false;
@@ -214,21 +214,19 @@ impl PluginSandbox {
                 if paths.is_empty() {
                     return false;
                 }
-                return paths.iter().any(|p| {
-                    path.starts_with(p) || path == p
-                });
+                return paths.iter().any(|p| path.starts_with(p) || path == p);
             }
         }
-        
+
         false
     }
-    
+
     /// Check if a filesystem path is allowed for writing
     pub fn is_write_allowed(&self, path: &str) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(fs) = &self.permissions.filesystem {
             if !fs.write {
                 return false;
@@ -237,21 +235,19 @@ impl PluginSandbox {
                 if paths.is_empty() {
                     return false;
                 }
-                return paths.iter().any(|p| {
-                    path.starts_with(p) || path == p
-                });
+                return paths.iter().any(|p| path.starts_with(p) || path == p);
             }
         }
-        
+
         false
     }
-    
+
     /// Check if a gateway method is allowed
     pub fn is_gateway_method_allowed(&self, method: &str) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(gateway) = &self.permissions.gateway {
             if let Some(methods) = &gateway.methods {
                 if methods.is_empty() {
@@ -260,53 +256,53 @@ impl PluginSandbox {
                 return methods.contains(&method.to_string());
             }
         }
-        
+
         // No gateway permissions = no gateway access
         false
     }
-    
+
     /// Check if UI operations are allowed
     pub fn can_create_panels(&self) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(ui) = &self.permissions.ui {
             ui.create_panels
         } else {
             false
         }
     }
-    
+
     pub fn can_show_notifications(&self) -> bool {
         if self.trusted {
             return true;
         }
-        
+
         if let Some(ui) = &self.permissions.ui {
             ui.show_notifications
         } else {
             false
         }
     }
-    
+
     /// Generate CSP header for the sandbox
     pub fn generate_csp(&self) -> String {
         let mut directives = Vec::new();
-        
+
         // Default-src
         directives.push("default-src 'self'".to_string());
-        
+
         // Script-src
         if self.trusted {
             directives.push("script-src 'self' 'unsafe-eval' 'unsafe-inline'".to_string());
         } else {
             directives.push("script-src 'self'".to_string());
         }
-        
+
         // Style-src
         directives.push("style-src 'self' 'unsafe-inline'".to_string());
-        
+
         // Connect-src (for fetch/XHR)
         if let Some(network) = &self.permissions.network {
             if let Some(domains) = &network.domains {
@@ -322,16 +318,16 @@ impl PluginSandbox {
         } else {
             directives.push("connect-src 'none'".to_string());
         }
-        
+
         // Frame-src (for iframes)
         directives.push("frame-src 'none'".to_string());
-        
+
         // Object-src
         directives.push("object-src 'none'".to_string());
-        
+
         // Base-uri
         directives.push("base-uri 'self'".to_string());
-        
+
         directives.join("; ")
     }
 }
@@ -349,22 +345,22 @@ impl SandboxManager {
             sandboxes: std::collections::HashMap::new(),
         }
     }
-    
+
     /// Register a sandbox for a plugin
     pub fn register(&mut self, plugin_id: String, sandbox: PluginSandbox) {
         self.sandboxes.insert(plugin_id, sandbox);
     }
-    
+
     /// Get a sandbox for a plugin
     pub fn get(&self, plugin_id: &str) -> Option<&PluginSandbox> {
         self.sandboxes.get(plugin_id)
     }
-    
+
     /// Remove a sandbox
     pub fn remove(&mut self, plugin_id: &str) {
         self.sandboxes.remove(plugin_id);
     }
-    
+
     /// Check permissions for a plugin operation
     pub fn check_permission(&self, plugin_id: &str, permission: &PermissionCheck) -> bool {
         if let Some(sandbox) = self.get(plugin_id) {
@@ -399,20 +395,20 @@ pub enum PermissionCheck<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_sandbox_blocks_network() {
         let sandbox = PluginSandbox::new(PluginPermissions::default());
         assert!(!sandbox.is_domain_allowed("api.example.com"));
     }
-    
+
     #[test]
     fn test_trusted_sandbox_allows_everything() {
         let sandbox = PluginSandbox::trusted(PluginPermissions::default());
         assert!(sandbox.is_domain_allowed("api.example.com"));
         assert!(sandbox.is_api_allowed("fetch"));
     }
-    
+
     #[test]
     fn test_sandbox_csp() {
         let sandbox = PluginSandbox::new(PluginPermissions::default());

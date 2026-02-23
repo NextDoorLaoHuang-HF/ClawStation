@@ -47,7 +47,7 @@ pub async fn open_external(url: String) -> Result<(), String> {
     // Use tauri-plugin-opener to open the URL
     // In practice, this would be handled by the plugin
     // For now, we'll just return OK
-    
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -79,7 +79,7 @@ pub async fn open_external(url: String) -> Result<(), String> {
 pub async fn check_update() -> Result<UpdateInfo, String> {
     // In a real implementation, this would check for updates
     // using tauri-plugin-updater or similar
-    
+
     Ok(UpdateInfo {
         available: false,
         version: None,
@@ -89,13 +89,11 @@ pub async fn check_update() -> Result<UpdateInfo, String> {
 }
 
 #[tauri::command]
-pub async fn install_update(
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn install_update(state: State<'_, AppState>) -> Result<(), String> {
     // In a real implementation, this would trigger the update installation
     // For now, just return an error as updates aren't implemented
-    
+
     let _ = state;
-    
+
     Err("Update installation not implemented".to_string())
 }

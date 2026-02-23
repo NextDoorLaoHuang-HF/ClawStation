@@ -1,12 +1,10 @@
 // Files Module - File browsing and management
 
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tauri::{AppHandle, Emitter, State};
-use notify::{Watcher, RecommendedWatcher, RecursiveMode, Event, EventKind};
 
 use crate::AppState;
 
@@ -88,7 +86,10 @@ impl Default for FileManager {
 
 fn get_workspace_root(state: &State<'_, AppState>, agent_id: &str) -> PathBuf {
     let settings = state.settings.blocking_read();
-    settings.workspace_dir.clone().unwrap_or_else(|| get_default_workspace_dir(agent_id))
+    settings
+        .workspace_dir
+        .clone()
+        .unwrap_or_else(|| get_default_workspace_dir(agent_id))
 }
 
 #[tauri::command]
@@ -97,7 +98,7 @@ pub async fn list_workspace(
     state: State<'_, AppState>,
 ) -> Result<Vec<FileInfo>, String> {
     let workspace_root = get_workspace_root(&state, &params.agent_id);
-    
+
     let base_path = if let Some(rel_path) = &params.path {
         workspace_root.join(rel_path)
     } else {
@@ -114,7 +115,7 @@ pub async fn list_workspace(
     let mut files = Vec::new();
 
     while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-        let path = entry.path();
+        let _path = entry.path();
         let metadata = entry.metadata().await.map_err(|e| e.to_string())?;
 
         let name = entry.file_name().to_string_lossy().to_string();
@@ -145,12 +146,10 @@ pub async fn list_workspace(
     }
 
     // Sort: directories first, then by name
-    files.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    files.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     Ok(files)
@@ -211,9 +210,10 @@ pub async fn read_image(
         .map_err(|e| format!("Failed to read image: {}", e))?;
 
     // Get image dimensions (simplified - in real impl use image crate)
-    let (width, height, mime_type) = get_image_info(&file_path)
-        .await
-        .unwrap_or((0, 0, "image/png".to_string()));
+    let (width, height, mime_type) =
+        get_image_info(&file_path)
+            .await
+            .unwrap_or((0, 0, "image/png".to_string()));
 
     Ok(serde_json::json!({
         "data": data,
@@ -288,7 +288,7 @@ pub async fn unwatch_directory(
     let watcher_key = format!("{}:{}", params.agent_id, params.path);
 
     let mut files = state.files.write().await;
-    
+
     if files.watchers.remove(&watcher_key).is_none() {
         return Err(format!("No watcher found for: {}", params.path));
     }
@@ -312,7 +312,7 @@ fn get_default_workspace_dir(agent_id: &str) -> PathBuf {
 async fn get_image_info(path: &PathBuf) -> Option<(u32, u32, String)> {
     // Simplified - in real implementation use the image crate
     let extension = path.extension()?.to_str()?;
-    
+
     let mime_type = match extension.to_lowercase().as_str() {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
@@ -322,7 +322,7 @@ async fn get_image_info(path: &PathBuf) -> Option<(u32, u32, String)> {
         "bmp" => "image/bmp",
         _ => "application/octet-stream",
     };
-    
+
     // Return placeholder dimensions - real impl would decode image
     Some((0, 0, mime_type.to_string()))
 }

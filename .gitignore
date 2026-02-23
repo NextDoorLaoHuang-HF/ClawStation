@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Rust / Tauri
+src-tauri/target/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

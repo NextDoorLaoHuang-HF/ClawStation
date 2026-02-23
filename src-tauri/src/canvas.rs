@@ -2,8 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::AppState;
@@ -93,11 +91,23 @@ pub struct Component {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "component", rename_all = "PascalCase")]
 pub enum ComponentType {
-    Column { children: Children },
-    Text { text: TextContent, usage_hint: Option<String> },
-    Button { label: String, on_press: Option<String> },
-    Row { children: Children },
-    Image { source: ImageSource },
+    Column {
+        children: Children,
+    },
+    Text {
+        text: TextContent,
+        usage_hint: Option<String>,
+    },
+    Button {
+        label: String,
+        on_press: Option<String>,
+    },
+    Row {
+        children: Children,
+    },
+    Image {
+        source: ImageSource,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +150,7 @@ pub async fn canvas_present(
 ) -> Result<CanvasState, String> {
     tracing::info!("Presenting canvas for session: {}", params.session_id);
 
-    let mut canvas_state = CanvasState {
+    let canvas_state = CanvasState {
         session_id: params.session_id.clone(),
         visible: true,
         url: params.url.clone(),
@@ -151,7 +161,9 @@ pub async fn canvas_present(
     // For now, we just track the state
 
     let mut canvas = state.canvas.write().await;
-    canvas.canvases.insert(params.session_id.clone(), canvas_state.clone());
+    canvas
+        .canvases
+        .insert(params.session_id.clone(), canvas_state.clone());
 
     Ok(canvas_state)
 }
@@ -161,11 +173,7 @@ pub async fn canvas_navigate(
     params: CanvasNavigateParams,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    tracing::info!(
-        "Navigating canvas {} to: {}",
-        params.session_id,
-        params.url
-    );
+    tracing::info!("Navigating canvas {} to: {}", params.session_id, params.url);
 
     let mut canvas = state.canvas.write().await;
 
@@ -197,7 +205,10 @@ pub async fn canvas_eval(
 
     // Check if canvas exists
     if !canvas.canvases.contains_key(&params.session_id) {
-        return Err(format!("Canvas not found for session: {}", params.session_id));
+        return Err(format!(
+            "Canvas not found for session: {}",
+            params.session_id
+        ));
     }
 
     // In a real implementation, this would execute JavaScript in the canvas webview
@@ -217,7 +228,10 @@ pub async fn canvas_snapshot(
 
     // Check if canvas exists
     if !canvas.canvases.contains_key(&params.session_id) {
-        return Err(format!("Canvas not found for session: {}", params.session_id));
+        return Err(format!(
+            "Canvas not found for session: {}",
+            params.session_id
+        ));
     }
 
     // In a real implementation, this would capture the canvas as an image
@@ -241,48 +255,64 @@ pub async fn a2ui_push(
 
     // Check if canvas exists
     if !canvas.canvases.contains_key(&params.session_id) {
-        return Err(format!("Canvas not found for session: {}", params.session_id));
+        return Err(format!(
+            "Canvas not found for session: {}",
+            params.session_id
+        ));
     }
 
     // Process each command
     for command in &params.commands {
         match command {
-            A2UICommand::BeginRendering {
-                surface_id,
-                root,
-            } => {
+            A2UICommand::BeginRendering { surface_id, root } => {
                 tracing::debug!("A2UI: BeginRendering {} -> {}", surface_id, root);
-                let _ = app.emit("a2ui", serde_json::json!({
-                    "type": "beginRendering",
-                    "surfaceId": surface_id,
-                    "root": root
-                }));
+                let _ = app.emit(
+                    "a2ui",
+                    serde_json::json!({
+                        "type": "beginRendering",
+                        "surfaceId": surface_id,
+                        "root": root
+                    }),
+                );
             }
             A2UICommand::SurfaceUpdate {
                 surface_id,
                 components,
             } => {
-                tracing::debug!("A2UI: SurfaceUpdate {} ({} components)", surface_id, components.len());
-                let _ = app.emit("a2ui", serde_json::json!({
-                    "type": "surfaceUpdate",
-                    "surfaceId": surface_id,
-                    "components": components
-                }));
+                tracing::debug!(
+                    "A2UI: SurfaceUpdate {} ({} components)",
+                    surface_id,
+                    components.len()
+                );
+                let _ = app.emit(
+                    "a2ui",
+                    serde_json::json!({
+                        "type": "surfaceUpdate",
+                        "surfaceId": surface_id,
+                        "components": components
+                    }),
+                );
             }
             A2UICommand::DataModelUpdate { surface_id, data } => {
                 tracing::debug!("A2UI: DataModelUpdate {}", surface_id);
-                let _ = app.emit("a2ui", serde_json::json!({
-                    "type": "dataModelUpdate",
-                    "surfaceId": surface_id,
-                    "data": data
-                }));
+                let _ = app.emit(
+                    "a2ui",
+                    serde_json::json!({
+                        "type": "dataModelUpdate",
+                        "surfaceId": surface_id,
+                        "data": data
+                    }),
+                );
             }
             A2UICommand::DeleteSurface { surface_id } => {
                 tracing::debug!("A2UI: DeleteSurface {}", surface_id);
-                let _ = app.emit("a2ui", serde_json::json!({
-                    "type": "deleteSurface",
-                    "surfaceId": surface_id
-                }));
+                let _ = app.emit(
+                    "a2ui",
+                    serde_json::json!({
+                        "type": "deleteSurface",
+                        "surfaceId": surface_id
+                    }),
+                );
             }
         }
     }

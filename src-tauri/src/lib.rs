@@ -1,24 +1,23 @@
 // ClawStation Library - Main entry point and module exports
 
-pub mod gateway;
-pub mod sessions;
+pub mod agents;
 pub mod canvas;
 pub mod files;
-pub mod agents;
+pub mod gateway;
+pub mod plugins;
+pub mod sessions;
 pub mod settings;
 pub mod system;
-pub mod plugins;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tauri::Manager;
 
-pub use gateway::{GatewayConfig, GatewayStatus};
-pub use sessions::Session;
+pub use agents::AgentInfo;
 pub use canvas::CanvasState;
 pub use files::FileInfo;
-pub use agents::AgentInfo;
-pub use plugins::{PluginInfo, PluginManagerState, create_plugin_manager};
+pub use gateway::{GatewayConfig, GatewayStatus};
+pub use plugins::{create_plugin_manager, PluginInfo, PluginManagerState};
+pub use sessions::Session;
 
 // Application state shared across all commands
 pub struct AppState {

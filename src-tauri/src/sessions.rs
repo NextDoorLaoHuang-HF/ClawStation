@@ -2,8 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
@@ -60,8 +58,12 @@ pub enum MessageRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ContentPart {
-    Text { text: String },
-    Image { image: String },
+    Text {
+        text: String,
+    },
+    Image {
+        image: String,
+    },
     ToolCall {
         id: String,
         name: String,
@@ -214,7 +216,7 @@ pub async fn get_history(
         .ok_or_else(|| format!("Session not found: {}", params.session_key))?;
 
     let mut result = history;
-    
+
     // Apply limit
     if params.limit > 0 && (result.len() as i32) > params.limit {
         result = result.split_off(result.len() - (params.limit as usize));
@@ -223,8 +225,11 @@ pub async fn get_history(
     // Filter tools if not requested
     if !params.include_tools {
         result.retain(|m| {
-            m.role != MessageRole::ToolResult && 
-            !m.content.iter().any(|c| matches!(c, ContentPart::ToolCall { .. }))
+            m.role != MessageRole::ToolResult
+                && !m
+                    .content
+                    .iter()
+                    .any(|c| matches!(c, ContentPart::ToolCall { .. }))
         });
     }
 
@@ -264,11 +269,14 @@ pub async fn send_message(
         .push(message);
 
     // Emit message sent event
-    let _ = app.emit("agent", serde_json::json!({
-        "sessionKey": params.session_key,
-        "type": "text",
-        "payload": { "text": params.message }
-    }));
+    let _ = app.emit(
+        "agent",
+        serde_json::json!({
+            "sessionKey": params.session_key,
+            "type": "text",
+            "payload": { "text": params.message }
+        }),
+    );
 
     // In a real implementation, this would forward to the Gateway
     // and the agent would process the message
@@ -353,10 +361,13 @@ pub async fn spawn_subagent(
     sessions.history.insert(session_key.clone(), Vec::new());
 
     // Emit started event
-    let _ = app.emit("subagent", serde_json::json!({
-        "runId": run_id,
-        "status": "accepted"
-    }));
+    let _ = app.emit(
+        "subagent",
+        serde_json::json!({
+            "runId": run_id,
+            "status": "accepted"
+        }),
+    );
 
     // In a real implementation, this would spawn a subagent task via the Gateway
     // and emit completion events when done

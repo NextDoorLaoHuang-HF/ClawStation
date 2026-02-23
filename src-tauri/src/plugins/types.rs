@@ -217,7 +217,7 @@ pub struct PluginPermissions {
     pub ui: Option<UiPermissions>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct FilesystemPermissions {
     #[serde(default)]

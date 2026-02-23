@@ -171,7 +171,7 @@ pub async fn connect(
 
     // Spawn task to handle outgoing messages
     tokio::spawn(async move {
-        let mut write = write_clone;
+        let write = write_clone;
         let mut rx = rx;
         let mut shutdown_rx = shutdown_rx;
         loop {

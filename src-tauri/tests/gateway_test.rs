@@ -6,16 +6,16 @@ use std::time::Duration;
 #[tokio::test]
 async fn test_gateway_connection() {
     let url = "ws://127.0.0.1:18789";
-    
+
     // Try to connect
     let result = tokio_tungstenite::connect_async(url).await;
-    
+
     match result {
         Ok((ws_stream, _)) => {
             println!("✅ Successfully connected to Gateway at {}", url);
-            
+
             let (mut write, mut read) = ws_stream.split();
-            
+
             // Send a ping
             let ping = serde_json::json!({
                 "type": "req",
@@ -23,11 +23,14 @@ async fn test_gateway_connection() {
                 "method": "system.ping",
                 "params": {}
             });
-            
+
             use tokio_tungstenite::tungstenite::Message;
-            write.send(Message::Text(ping.to_string().into())).await.unwrap();
+            write
+                .send(Message::Text(ping.to_string().into()))
+                .await
+                .unwrap();
             println!("✅ Sent ping");
-            
+
             // Wait for response
             tokio::select! {
                 msg = read.next() => {

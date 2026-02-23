@@ -2,12 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use tauri::State;
 
-use crate::AppState;
 use crate::gateway::GatewayConfig;
+use crate::AppState;
 
 // ============== Types ==============
 
@@ -127,11 +125,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             app: AppSettings::default(),
-            workspace_dir: dirs::data_dir().map(|p| {
-                p.join("openclaw")
-                    .join("agents")
-                    .join("workspace")
-            }),
+            workspace_dir: dirs::data_dir()
+                .map(|p| p.join("openclaw").join("agents").join("workspace")),
         }
     }
 }
