@@ -1,6 +1,7 @@
 // Plugin Tests - Comprehensive tests for the plugin system
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use crate::plugins::sandbox::PermissionCheck;
     use crate::plugins::types::{
@@ -8,7 +9,9 @@ mod tests {
         PluginContributes, PluginDependencies, PluginInfo, PluginManifest, PluginPermissions,
         UiPermissions,
     };
-    use crate::plugins::{AllowedApis, Plugin, PluginLoader, PluginSandbox, ResourceLimits, SandboxManager};
+    use crate::plugins::{
+        AllowedApis, Plugin, PluginLoader, PluginSandbox, ResourceLimits, SandboxManager,
+    };
     use std::fs;
     use tempfile::TempDir;
 
@@ -440,7 +443,7 @@ mod tests {
         let plugin = Plugin::new(manifest, path.clone());
 
         assert_eq!(plugin.manifest.id, "test-plugin");
-        assert_eq!(plugin.enabled, true);
+        assert!(plugin.enabled);
         assert_eq!(plugin.path, path);
     }
 

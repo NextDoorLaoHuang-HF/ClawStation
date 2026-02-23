@@ -3,9 +3,9 @@
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -102,22 +102,12 @@ pub enum WsMessage {
 }
 
 // Internal gateway state
+#[derive(Default)]
 pub struct GatewayState {
     pub config: Option<GatewayConfig>,
     pub status: GatewayStatus,
     pub sender: Option<mpsc::Sender<WsMessage>>,
     pub shutdown_tx: Option<Arc<RwLock<Option<mpsc::Sender<()>>>>>,
-}
-
-impl Default for GatewayState {
-    fn default() -> Self {
-        Self {
-            config: None,
-            status: GatewayStatus::default(),
-            sender: None,
-            shutdown_tx: None,
-        }
-    }
 }
 
 // ============== Commands ==============
@@ -141,7 +131,7 @@ pub async fn connect(
     let url = config.url.clone();
     let token = config.token.clone();
     let agent_id = config.agent_id.clone();
-    let canvas_port = config.canvas_port;
+    let _canvas_port = config.canvas_port;
 
     // Connect to WebSocket
     let (ws_stream, _) = connect_async(&url)
@@ -262,9 +252,14 @@ pub async fn connect(
         // Cleanup on disconnect
         let mut gateway = state_clone.write().await;
         gateway.status.connected = false;
-        let _ = app_clone.emit("gateway", GatewayEvent::Disconnected {
-            payload: DisconnectedPayload { reason: "Connection closed".to_string() }
-        });
+        let _ = app_clone.emit(
+            "gateway",
+            GatewayEvent::Disconnected {
+                payload: DisconnectedPayload {
+                    reason: "Connection closed".to_string(),
+                },
+            },
+        );
     });
 
     // Send connect request
@@ -304,12 +299,17 @@ pub async fn connect(
     tx.send(connect_req).await.map_err(|e| e.to_string())?;
 
     // Emit connected event
-    let _ = app.emit("gateway", GatewayEvent::Connected {
-        payload: ConnectedPayload {
-            protocol: 3,
-            policy: Policy { tick_interval_ms: 15000 },
-        }
-    });
+    let _ = app.emit(
+        "gateway",
+        GatewayEvent::Connected {
+            payload: ConnectedPayload {
+                protocol: 3,
+                policy: Policy {
+                    tick_interval_ms: 15000,
+                },
+            },
+        },
+    );
 
     tracing::info!("Gateway connection initiated");
     Ok(())
@@ -318,7 +318,7 @@ pub async fn connect(
 async fn handle_ws_message(
     msg: &serde_json::Value,
     app: &AppHandle,
-    state: &Arc<RwLock<GatewayState>>,
+    _state: &Arc<RwLock<GatewayState>>,
 ) {
     if let Some(msg_type) = msg.get("type").and_then(|v| v.as_str()) {
         match msg_type {
@@ -373,9 +373,14 @@ pub async fn disconnect(state: State<'_, AppState>, app: AppHandle) -> Result<()
         }
     }
 
-    let _ = app.emit("gateway", GatewayEvent::Disconnected {
-        payload: DisconnectedPayload { reason: "Disconnected by user".to_string() }
-    });
+    let _ = app.emit(
+        "gateway",
+        GatewayEvent::Disconnected {
+            payload: DisconnectedPayload {
+                reason: "Disconnected by user".to_string(),
+            },
+        },
+    );
 
     Ok(())
 }

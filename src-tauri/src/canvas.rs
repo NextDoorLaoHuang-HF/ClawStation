@@ -129,16 +129,9 @@ pub struct ImageSource {
 
 // ============== Canvas Manager ==============
 
+#[derive(Default)]
 pub struct CanvasManager {
     pub canvases: HashMap<String, CanvasState>,
-}
-
-impl Default for CanvasManager {
-    fn default() -> Self {
-        Self {
-            canvases: HashMap::new(),
-        }
-    }
 }
 
 // ============== Commands ==============

@@ -23,20 +23,15 @@ pub struct Session {
     pub channel: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionKind {
+    #[default]
+    Other,
     Main,
     Dm,
     Group,
     Cron,
-    Other,
-}
-
-impl Default for SessionKind {
-    fn default() -> Self {
-        SessionKind::Other
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,7 +174,7 @@ pub async fn list_sessions(
     params: Option<ListSessionsParams>,
     state: State<'_, AppState>,
 ) -> Result<Vec<Session>, String> {
-    let params = params.unwrap_or(ListSessionsParams::default());
+    let params = params.unwrap_or_default();
     let sessions = state.sessions.read().await;
 
     let mut result: Vec<Session> = sessions.sessions.values().cloned().collect();

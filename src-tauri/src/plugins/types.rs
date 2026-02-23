@@ -51,19 +51,13 @@ pub struct PanelDefinition {
     pub default_open: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum PanelPosition {
+    #[default]
     Sidebar,
     Main,
     Bottom,
     Floating,
-}
-
-impl Default for PanelPosition {
-    fn default() -> Self {
-        PanelPosition::Sidebar
-    }
 }
 
 /// Widget definition - a UI widget contributed by a plugin

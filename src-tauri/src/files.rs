@@ -3,7 +3,7 @@
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::AppState;
@@ -63,23 +63,16 @@ pub struct FileWatchEvent {
 
 // ============== File Manager ==============
 
+#[derive(Default)]
 pub struct FileManager {
     pub watchers: HashMap<String, WatcherHandle>,
 }
 
-struct WatcherHandle {
+pub struct WatcherHandle {
     #[allow(dead_code)]
     watcher: RecommendedWatcher,
+    #[allow(dead_code)]
     agent_id: String,
-    path: String,
-}
-
-impl Default for FileManager {
-    fn default() -> Self {
-        Self {
-            watchers: HashMap::new(),
-        }
-    }
 }
 
 // ============== Commands ==============
@@ -273,7 +266,6 @@ pub async fn watch_directory(
         WatcherHandle {
             watcher,
             agent_id,
-            path: path_str,
         },
     );
 
@@ -309,7 +301,7 @@ fn get_default_workspace_dir(agent_id: &str) -> PathBuf {
         .join("workspace")
 }
 
-async fn get_image_info(path: &PathBuf) -> Option<(u32, u32, String)> {
+async fn get_image_info(path: &Path) -> Option<(u32, u32, String)> {
     // Simplified - in real implementation use the image crate
     let extension = path.extension()?.to_str()?;
 
