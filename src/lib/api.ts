@@ -7,8 +7,8 @@
 // import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type * as types from '../types';
 
-// Mock invoke 函数
-const invoke = async <T>(_command: string, _args?: Record<string, unknown>): Promise<T> => {
+// Mock invoke 函数 - 导出以便测试时可以 mock
+export const tauriInvoke = async <T>(_command: string, _args?: Record<string, unknown>): Promise<T> => {
   throw new Error('Tauri backend not implemented yet');
 };
 
@@ -18,13 +18,13 @@ const invoke = async <T>(_command: string, _args?: Record<string, unknown>): Pro
 
 export const gateway = {
   connect: (config: types.GatewayConfig): Promise<void> => 
-    invoke('connect', { config }),
+    tauriInvoke('connect', { config }),
   
   disconnect: (): Promise<void> => 
-    invoke('disconnect'),
+    tauriInvoke('disconnect'),
   
   getStatus: (): Promise<types.GatewayStatus> => 
-    invoke('get_status'),
+    tauriInvoke('get_status'),
 };
 
 // ============================================
@@ -33,19 +33,19 @@ export const gateway = {
 
 export const sessions = {
   list: (params?: { agentId?: string; activeMinutes?: number; limit?: number }): Promise<types.Session[]> => 
-    invoke('list_sessions', params ?? {}),
+    tauriInvoke('list_sessions', params ?? {}),
   
   getHistory: (sessionKey: string, limit?: number, includeTools?: boolean): Promise<types.Message[]> => 
-    invoke('get_history', { sessionKey, limit, includeTools }),
+    tauriInvoke('get_history', { sessionKey, limit, includeTools }),
   
   send: (sessionKey: string, message: string, attachments?: types.Attachment[]): Promise<void> => 
-    invoke('send_message', { sessionKey, message, attachments }),
+    tauriInvoke('send_message', { sessionKey, message, attachments }),
   
   abort: (sessionKey: string): Promise<{ stopped: number }> => 
-    invoke('abort_session', { sessionKey }),
+    tauriInvoke('abort_session', { sessionKey }),
   
   create: (agentId: string, model?: string): Promise<{ sessionKey: string }> => 
-    invoke('create_session', { agentId, model }),
+    tauriInvoke('create_session', { agentId, model }),
   
   spawnSubAgent: (params: {
     task: string;
@@ -54,7 +54,7 @@ export const sessions = {
     model?: string;
     cleanup?: 'delete' | 'keep';
   }): Promise<{ sessionKey: string; runId: string; status: string }> => 
-    invoke('spawn_subagent', params),
+    tauriInvoke('spawn_subagent', params),
 };
 
 // ============================================
@@ -63,19 +63,19 @@ export const sessions = {
 
 export const canvas = {
   present: (sessionId: string, url?: string): Promise<types.CanvasState> => 
-    invoke('canvas_present', { sessionId, url }),
+    tauriInvoke('canvas_present', { sessionId, url }),
   
   navigate: (sessionId: string, url: string): Promise<void> => 
-    invoke('canvas_navigate', { sessionId, url }),
+    tauriInvoke('canvas_navigate', { sessionId, url }),
   
   eval: (sessionId: string, javascript: string): Promise<unknown> => 
-    invoke('canvas_eval', { sessionId, javascript }),
+    tauriInvoke('canvas_eval', { sessionId, javascript }),
   
   snapshot: (sessionId: string, format?: 'png' | 'jpeg'): Promise<number[]> => 
-    invoke('canvas_snapshot', { sessionId, format }),
+    tauriInvoke('canvas_snapshot', { sessionId, format }),
   
   pushA2UI: (sessionId: string, commands: types.A2UICommand[]): Promise<void> => 
-    invoke('a2ui_push', { sessionId, commands }),
+    tauriInvoke('a2ui_push', { sessionId, commands }),
 };
 
 // ============================================
@@ -84,19 +84,19 @@ export const canvas = {
 
 export const files = {
   list: (agentId: string, path?: string): Promise<types.FileInfo[]> => 
-    invoke('list_workspace', { agentId, path }),
+    tauriInvoke('list_workspace', { agentId, path }),
   
   readText: (agentId: string, path: string, offset?: number, limit?: number): Promise<string> => 
-    invoke('read_file', { agentId, path, offset, limit }),
+    tauriInvoke('read_file', { agentId, path, offset, limit }),
   
   readImage: (agentId: string, path: string): Promise<{ data: number[]; width: number; height: number; mimeType: string }> => 
-    invoke('read_image', { agentId, path }),
+    tauriInvoke('read_image', { agentId, path }),
   
   watch: (agentId: string, path: string): Promise<void> => 
-    invoke('watch_directory', { agentId, path }),
+    tauriInvoke('watch_directory', { agentId, path }),
   
   unwatch: (agentId: string, path: string): Promise<void> => 
-    invoke('unwatch_directory', { agentId, path }),
+    tauriInvoke('unwatch_directory', { agentId, path }),
 };
 
 // ============================================
@@ -105,13 +105,13 @@ export const files = {
 
 export const agents = {
   list: (): Promise<types.AgentInfo[]> => 
-    invoke('list_agents'),
+    tauriInvoke('list_agents'),
   
   switch: (agentId: string): Promise<{ previousAgentId: string; currentAgentId: string }> => 
-    invoke('switch_agent', { agentId }),
+    tauriInvoke('switch_agent', { agentId }),
   
   getConfig: (agentId: string): Promise<types.AgentConfig> => 
-    invoke('get_agent_config', { agentId }),
+    tauriInvoke('get_agent_config', { agentId }),
 };
 
 // ============================================
@@ -120,10 +120,10 @@ export const agents = {
 
 export const settings = {
   get: (): Promise<types.AppSettings> => 
-    invoke('get_settings'),
+    tauriInvoke('get_settings'),
   
   update: (settings: Partial<types.AppSettings>): Promise<void> => 
-    invoke('update_settings', { settings }),
+    tauriInvoke('update_settings', { settings }),
 };
 
 // ============================================
@@ -132,16 +132,16 @@ export const settings = {
 
 export const system = {
   getInfo: (): Promise<types.AppInfo> => 
-    invoke('get_app_info'),
+    tauriInvoke('get_app_info'),
   
   openExternal: (url: string): Promise<void> => 
-    invoke('open_external', { url }),
+    tauriInvoke('open_external', { url }),
   
   checkUpdate: (): Promise<types.UpdateInfo> => 
-    invoke('check_update'),
+    tauriInvoke('check_update'),
   
   installUpdate: (): Promise<void> => 
-    invoke('install_update'),
+    tauriInvoke('install_update'),
 };
 
 // ============================================
@@ -194,25 +194,25 @@ export interface PluginContributions {
 
 export const plugins = {
   list: (): Promise<PluginInfo[]> =>
-    invoke('list_plugins'),
+    tauriInvoke('list_plugins'),
 
   install: (source: string): Promise<void> =>
-    invoke('install_plugin', { source }),
+    tauriInvoke('install_plugin', { source }),
 
   uninstall: (id: string): Promise<void> =>
-    invoke('uninstall_plugin', { id }),
+    tauriInvoke('uninstall_plugin', { id }),
 
   enable: (id: string): Promise<void> =>
-    invoke('enable_plugin', { id }),
+    tauriInvoke('enable_plugin', { id }),
 
   disable: (id: string): Promise<void> =>
-    invoke('disable_plugin', { id }),
+    tauriInvoke('disable_plugin', { id }),
 
   reload: (id: string): Promise<void> =>
-    invoke('reload_plugin', { id }),
+    tauriInvoke('reload_plugin', { id }),
 
   getContributions: (id: string): Promise<PluginContributions> =>
-    invoke('get_plugin_contributions', { id }),
+    tauriInvoke('get_plugin_contributions', { id }),
 };
 
 // ============================================
@@ -231,7 +231,7 @@ export class ApiError extends Error {
 
 export async function safeInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>(command, args);
+    return await tauriInvoke<T>(command, args);
   } catch (error) {
     throw new ApiError(String(error), command);
   }
