@@ -46,13 +46,13 @@ jobs:
           key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run rustfmt
-        run: cargo fmt --all -- --check
+        run: cd src-tauri && cargo fmt --all -- --check
 
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        run: cd src-tauri && cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Check dependencies
-        run: cargo audit || true
+        run: cd src-tauri && cargo audit || true
 
   # Test suite
   test:
@@ -84,10 +84,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cargo test --workspace --all-features -- --nocapture
+        run: cd src-tauri && cargo test --workspace --all-features -- --nocapture
 
       - name: Run doc tests
-        run: cargo test --workspace --doc
+        run: cd src-tauri && cargo test --workspace --doc
 
   # Build for Linux
   build-linux:
@@ -287,8 +287,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Publish to crates.io
-        run: |
-          cd src-tauri
-          cargo publish
+        run: cd src-tauri && cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
