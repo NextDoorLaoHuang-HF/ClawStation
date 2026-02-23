@@ -315,9 +315,6 @@ pub async fn a2ui_push(
 
 // ============== Tests ==============
 
-
-// ============== Tests ==============
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,7 +408,9 @@ mod tests {
         };
 
         let mut manager = CanvasManager::default();
-        manager.canvases.insert("test-session".to_string(), state.clone());
+        manager
+            .canvases
+            .insert("test-session".to_string(), state.clone());
 
         assert_eq!(manager.canvases.len(), 1);
         assert!(manager.canvases.get("test-session").unwrap().visible);
@@ -425,7 +424,7 @@ mod tests {
             width: 800.0,
             height: 600.0,
         };
-        
+
         let json = serde_json::to_string(&bounds).unwrap();
         assert!(json.contains("100"));
         assert!(json.contains("200"));
@@ -441,7 +440,7 @@ mod tests {
             url: Some("http://localhost".to_string()),
             bounds: None,
         };
-        
+
         let json = serde_json::to_string(&state).unwrap();
         assert!(json.contains("test-1"));
         assert!(json.contains("true"));

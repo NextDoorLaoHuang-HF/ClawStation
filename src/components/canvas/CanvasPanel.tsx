@@ -25,6 +25,7 @@ export const CanvasPanel: React.FC = () => {
   const handleRefresh = () => {
     if (iframeRef.current) {
       setIsLoading(true);
+      // eslint-disable-next-line no-self-assign
       iframeRef.current.src = iframeRef.current.src;
       setTimeout(() => setIsLoading(false), 500);
     }

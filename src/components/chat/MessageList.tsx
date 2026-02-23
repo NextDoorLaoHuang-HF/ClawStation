@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { useSessionStore } from '../../stores/sessionStore';
 import { MessageItem } from './MessageItem';
 import { Loader2 } from 'lucide-react';
@@ -11,7 +11,10 @@ import { Loader2 } from 'lucide-react';
 export const MessageList: React.FC = () => {
   const { activeSessionKey, messages, isLoading, streamingMessage } = useSessionStore();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const currentMessages = activeSessionKey ? messages[activeSessionKey] || [] : [];
+  const currentMessages = useMemo(() => 
+    activeSessionKey ? messages[activeSessionKey] || [] : [],
+    [activeSessionKey, messages]
+  );
 
   // 自动滚动到底部
   useEffect(() => {

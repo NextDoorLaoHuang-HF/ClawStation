@@ -350,7 +350,7 @@ export class PluginLoader implements IPluginLoader {
         this.validatePlugin(plugin, manifest);
         
         return plugin;
-      } catch (error) {
+      } catch {
         // 继续尝试下一个文件
         continue;
       }

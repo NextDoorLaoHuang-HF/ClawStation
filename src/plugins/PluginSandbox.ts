@@ -217,6 +217,7 @@ export class PluginSandbox implements IPluginSandbox {
     }
 
     // 调用未使用的方法以避免 TypeScript 错误 (将来会实际使用)
+    // eslint-disable-next-line no-constant-condition
     if (false) {
       this.checkPermission('test');
       this.checkResourceLimit('memory', 0);
@@ -724,6 +725,7 @@ export class PluginSandbox implements IPluginSandbox {
    * 创建代理插件对象
    */
   private createProxyPlugin(manifest: PluginManifest): Plugin {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const sandbox = this;
     
     return {

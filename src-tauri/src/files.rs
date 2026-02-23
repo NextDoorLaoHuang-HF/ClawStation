@@ -261,13 +261,9 @@ pub async fn watch_directory(
     let watcher_key = format!("{}:{}", agent_id, path_str);
 
     let mut files = state.files.write().await;
-    files.watchers.insert(
-        watcher_key,
-        WatcherHandle {
-            watcher,
-            agent_id,
-        },
-    );
+    files
+        .watchers
+        .insert(watcher_key, WatcherHandle { watcher, agent_id });
 
     Ok(())
 }
