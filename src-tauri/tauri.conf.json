@@ -4,8 +4,8 @@
   "version": "1.0.3",
   "identifier": "com.openclaw.station",
   "build": {
-    "beforeBuildCommand": "pnpm build",
-    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "npm run build",
+    "beforeDevCommand": "npm run dev",
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173"
   },
@@ -47,12 +47,6 @@
   "plugins": {
     "shell": {
       "open": true
-    },
-    "fs": {
-      "scope": {
-        "allow": ["$HOME/.openclaw/**", "$APPDATA/**", "$LOCALAPPDATA/**"],
-        "deny": []
-      }
     }
   }
 }

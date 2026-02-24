@@ -27,6 +27,7 @@ coverage
 
 # Rust / Tauri
 src-tauri/target/
+src-tauri/gen/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

@@ -209,6 +209,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Show Node/npm versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Upgrade npm (stable)
+        run: npm i -g npm@10.9.4
+
+      - name: Install dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -232,16 +250,32 @@ jobs:
           path: src-tauri/target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build release
+      - name: Build Tauri bundles
+        run: npm run tauri:build -- --target ${{ matrix.target }}
+
+      - name: Prepare macOS artifacts
         run: |
-          cd src-tauri
-          cargo build --release --target ${{ matrix.target }}
+          set -euo pipefail
+          mkdir -p release-artifacts
+
+          # Raw binary (useful for debugging)
+          cp "src-tauri/target/${{ matrix.target }}/release/clawstation" "release-artifacts/clawstation-macos-${{ matrix.arch }}" || true
+
+          # App bundle (double-clickable when extracted)
+          APP_PATH="$(find \"src-tauri/target/${{ matrix.target }}/release/bundle/macos\" -maxdepth 1 -name '*.app' -print -quit)"
+          ditto -c -k --sequesterRsrc --keepParent \"$APP_PATH\" \"release-artifacts/clawstation-macos-${{ matrix.arch }}.app.zip\"
+
+          # DMG (if produced by bundler)
+          DMG_PATH="$(find \"src-tauri/target/${{ matrix.target }}/release/bundle\" -name '*.dmg' -print -quit || true)"
+          if [ -n \"$DMG_PATH\" ]; then
+            cp \"$DMG_PATH\" \"release-artifacts/clawstation-macos-${{ matrix.arch }}.dmg\"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}-release
-          path: src-tauri/target/${{ matrix.target }}/release/clawstation
+          path: release-artifacts/*
 
   # Build for Windows
   build-windows:
@@ -326,10 +360,11 @@ jobs:
 
           cp artifacts/linux-release/clawstation release-assets/clawstation-linux-x64
           cp artifacts/windows-release/clawstation.exe release-assets/clawstation-windows-x64.exe
-          cp artifacts/macos-intel-release/clawstation release-assets/clawstation-macos-x64
-          cp artifacts/macos-arm64-release/clawstation release-assets/clawstation-macos-arm64
+          # macOS artifacts include a raw binary + .app.zip (and optionally a .dmg)
+          cp artifacts/macos-intel-release/* release-assets/
+          cp artifacts/macos-arm64-release/* release-assets/
 
-          chmod +x release-assets/clawstation-linux-x64 release-assets/clawstation-macos-x64 release-assets/clawstation-macos-arm64 || true
+          chmod +x release-assets/clawstation-linux-x64 release-assets/clawstation-macos-intel release-assets/clawstation-macos-arm64 || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
