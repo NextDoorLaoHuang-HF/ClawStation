@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - GitHub Actions: surface macOS Tauri build failure details in the job summary
+- ESLint: ignore generated `src-tauri/target/` artifacts to avoid false parse errors
 
 ### Changed
 - GitHub Actions: build only the `.app` bundle for macOS in CI (`--bundles app`)
