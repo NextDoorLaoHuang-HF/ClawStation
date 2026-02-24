@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.5] - 2026-02-24
+
+### Fixed
+- GitHub Actions: surface macOS Tauri build failure details in the job summary
+
+### Changed
+- GitHub Actions: build only the `.app` bundle for macOS in CI (`--bundles app`)
+- GitHub Actions: disable fail-fast for macOS matrix to get both arch results
+
+---
+
 ## [1.0.4] - 2026-02-24
 
 ### Fixed
