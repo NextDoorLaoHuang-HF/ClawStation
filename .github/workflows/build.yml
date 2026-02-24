@@ -75,7 +75,8 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        # Force devDependencies even if the runner sets NODE_ENV=production.
+        run: npm ci --include=dev
 
       - name: Run frontend checks
         run: npm run check:frontend
