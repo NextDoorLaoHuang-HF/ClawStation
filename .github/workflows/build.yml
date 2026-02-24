@@ -303,13 +303,17 @@ jobs:
           cp "src-tauri/target/${{ matrix.target }}/release/clawstation" "release-artifacts/clawstation-macos-${{ matrix.arch }}" || true
 
           # App bundle (double-clickable when extracted)
-          APP_PATH="$(find \"src-tauri/target/${{ matrix.target }}/release/bundle/macos\" -maxdepth 1 -name '*.app' -print -quit)"
-          ditto -c -k --sequesterRsrc --keepParent \"$APP_PATH\" \"release-artifacts/clawstation-macos-${{ matrix.arch }}.app.zip\"
+          APP_PATH="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "Expected a .app bundle at src-tauri/target/${{ matrix.target }}/release/bundle/macos, but none was found."
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "release-artifacts/clawstation-macos-${{ matrix.arch }}.app.zip"
 
           # DMG (if produced by bundler)
-          DMG_PATH="$(find \"src-tauri/target/${{ matrix.target }}/release/bundle\" -name '*.dmg' -print -quit || true)"
-          if [ -n \"$DMG_PATH\" ]; then
-            cp \"$DMG_PATH\" \"release-artifacts/clawstation-macos-${{ matrix.arch }}.dmg\"
+          DMG_PATH="$(find "src-tauri/target/${{ matrix.target }}/release/bundle" -name '*.dmg' -print -quit || true)"
+          if [ -n "$DMG_PATH" ]; then
+            cp "$DMG_PATH" "release-artifacts/clawstation-macos-${{ matrix.arch }}.dmg"
           fi
 
       - name: Upload artifacts
