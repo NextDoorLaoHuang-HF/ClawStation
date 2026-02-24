@@ -3,8 +3,8 @@
 > **OpenClaw 桌面客户端** - 一个基于 Tauri 2.0 构建的现代化 AI 工作站
 
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-blue?logo=tauri)](https://tauri.app)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript)](https://www.typescriptlang.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
@@ -52,11 +52,10 @@
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| [React](https://react.dev) | 18.x | UI 框架 |
+| [React](https://react.dev) | 19.x | UI 框架 |
 | [TypeScript](https://www.typescriptlang.org) | 5.x | 类型安全 |
 | [TailwindCSS](https://tailwindcss.com) | 3.x | 样式系统 |
-| [Zustand](https://github.com/pmndrs/zustand) | 4.x | 状态管理 |
-| [React Query](https://tanstack.com/query) | 5.x | 数据获取 |
+| [Zustand](https://github.com/pmndrs/zustand) | 5.x | 状态管理 |
 
 ### 后端
 
@@ -81,7 +80,7 @@
 
 - [Node.js](https://nodejs.org) 18+ 
 - [Rust](https://www.rust-lang.org/tools/install) 1.77+
-- [pnpm](https://pnpm.io) (推荐)
+- npm（仓库包含 `package-lock.json`，CI 默认使用 npm）
 
 ### 快速开始
 
@@ -91,26 +90,23 @@ git clone https://github.com/openclaw/clawstation.git
 cd clawstation
 
 # 2. 安装依赖
-pnpm install
+npm ci
 
-# 3. 安装 Tauri CLI
-pnpm add -D @tauri-apps/cli
-
-# 4. 启动开发服务器
-pnpm tauri dev
+# 3. 启动开发（桌面应用）
+npm run tauri:dev
 ```
 
 ### 生产构建
 
 ```bash
 # Windows
-pnpm tauri build --target x86_64-pc-windows-msvc
+npm run tauri:build -- --target x86_64-pc-windows-msvc
 
 # macOS (Intel)
-pnpm tauri build --target x86_64-apple-darwin
+npm run tauri:build -- --target x86_64-apple-darwin
 
 # macOS (Apple Silicon)
-pnpm tauri build --target aarch64-apple-darwin
+npm run tauri:build -- --target aarch64-apple-darwin
 ```
 
 构建产物位于 `src-tauri/target/release/bundle/`。
@@ -123,32 +119,32 @@ pnpm tauri build --target aarch64-apple-darwin
 
 ```bash
 # 启动开发服务器（热重载）
-pnpm dev
+npm run dev
 
 # 构建前端
-pnpm build
+npm run build
 
 # 运行测试
-pnpm test
+npm test
 
 # 代码检查
-pnpm lint
+npm run lint
 
 # 类型检查
-pnpm type-check
+npm run type-check
 ```
 
 ### Tauri 命令
 
 ```bash
 # 开发模式
-pnpm tauri dev
+npm run tauri:dev
 
 # 生产构建
-pnpm tauri build
+npm run tauri:build
 
 # 生成图标
-pnpm tauri icon
+npm run tauri:icon
 ```
 
 ### 环境配置

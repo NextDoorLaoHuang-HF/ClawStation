@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MessageItem } from '../MessageItem'
-import type { Message } from '../../types'
+import type { Message } from '../../../types'
 
 describe('MessageItem', () => {
   const baseMessage: Message = {

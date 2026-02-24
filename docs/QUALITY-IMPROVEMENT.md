@@ -178,26 +178,15 @@ mod tests {
 
 ```bash
 # scripts/test-coverage.sh
-#!/bin/bash
+# 生成前端覆盖率（Vitest）
+./scripts/test-coverage.sh
 
-echo "📊 测试覆盖率报告"
-
-# 前端
-npm run test:coverage
-mv coverage/lcov.info coverage/frontend.lcov
-
-# 后端
-cargo tarpaulin --out Lcov --output-path coverage/backend.lcov
-
-# 合并报告
-lcov --add-tracefile coverage/frontend.lcov \
-     --add-tracefile coverage/backend.lcov \
-     --output-file coverage/total.lcov
-
-# 生成 HTML
-genhtml coverage/total.lcov -o coverage/html
-
-echo "✅ 报告生成：coverage/html/index.html"
+# 产物示例：
+# - coverage/index.html
+# - coverage/lcov.info
+#
+# 后端覆盖率（可选）：需要额外安装 cargo-tarpaulin
+# - cd src-tauri && cargo tarpaulin --out Lcov --output-dir ../coverage
 ```
 
 **预计工作量**：8h  
@@ -227,15 +216,9 @@ docs/
 
 ```bash
 # scripts/generate-api-docs.sh
+./scripts/generate-api-docs.sh
 
-# Rust API 文档
-cargo doc --no-deps --output-dir docs/api/rust
-
-# TypeScript API 文档
-npx typedoc --out docs/api/typescript src/
-
-# OpenAPI 规范
-npx ts-to-openapi src/types/api.ts docs/api/openapi.yaml
+# 输出：docs/api/tauri-commands.md（从 #[tauri::command] 扫描生成）
 ```
 
 ### 3.3 文档质量检查

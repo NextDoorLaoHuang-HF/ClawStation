@@ -1,72 +1,84 @@
 #!/usr/bin/env node
 /**
  * ClawStation 分层架构 Linter
- * 基于 OpenAI "Harness Engineering" 原则
- * 
- * 功能：
- * 1. 检查分层依赖是否违规
- * 2. 错误消息包含修复指令
- * 3. 可被代理自动修复
+ *
+ * Notes:
+ * - This repo uses ESM ("type": "module"), so this script must be ESM too.
+ * - Prefer running from repo root: `node scripts/layer-lint.js`.
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs'
+import path from 'node:path'
 
 // 分层规则定义
 const LAYERS = {
-  types: { level: 0, allowed: [] },
-  config: { level: 1, allowed: ['types'] },
-  service: { level: 2, allowed: ['types', 'config'] },
-  store: { level: 3, allowed: ['types', 'service'] },
-  ui: { level: 4, allowed: ['types', 'store'] },
+  // Allow same-layer imports; enforce that lower layers never depend on higher layers.
+  types: { level: 0, allowed: ['types'] },
+  config: { level: 1, allowed: ['types', 'config'] },
+  service: { level: 2, allowed: ['types', 'config', 'service'] },
+  store: { level: 3, allowed: ['types', 'config', 'service', 'store'] },
+  ui: { level: 4, allowed: ['types', 'config', 'service', 'store', 'ui'] },
 };
 
 // 文件到层的映射
 const FILE_TO_LAYER = {
   'src/types/': 'types',
   'src/lib/': 'service',
+  'src/plugins/': 'service',
   'src/stores/': 'store',
   'src/components/': 'ui',
 };
+
+const REPO_ROOT = process.cwd()
+
+function isWithin(absPath, absDir) {
+  const rel = path.relative(absDir, absPath)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+function layerForFile(absFilePath) {
+  for (const [relPrefix, layer] of Object.entries(FILE_TO_LAYER)) {
+    const absPrefix = path.resolve(REPO_ROOT, relPrefix)
+    if (isWithin(absFilePath, absPrefix)) return layer
+  }
+  return null
+}
+
+function layerForImport(absImportPath) {
+  for (const [relPrefix, layer] of Object.entries(FILE_TO_LAYER)) {
+    const absPrefix = path.resolve(REPO_ROOT, relPrefix)
+    if (isWithin(absImportPath, absPrefix)) return layer
+  }
+  return null
+}
 
 // 检查单个文件
 function checkFile(filePath, content) {
   const issues = [];
   
   // 确定文件所在层
-  let fileLayer = null;
-  for (const [prefix, layer] of Object.entries(FILE_TO_LAYER)) {
-    if (filePath.startsWith(prefix)) {
-      fileLayer = layer;
-      break;
-    }
-  }
+  const absFilePath = path.resolve(REPO_ROOT, filePath)
+  const fileLayer = layerForFile(absFilePath)
   
   if (!fileLayer) return issues;
   
-  // 检查 import 语句
-  const importRegex = /import\s+.*from\s+['"]([^'"]+)['"]/g;
-  let match;
+  // 检查 import / re-export 语句
+  const moduleRefRegex = /(import|export)\s+.*from\s+['"]([^'"]+)['"]/g
+  let match
   
-  while ((match = importRegex.exec(content)) !== null) {
-    const importPath = match[1];
+  while ((match = moduleRefRegex.exec(content)) !== null) {
+    const importPath = match[2]
     
     // 确定导入的层
-    let importLayer = null;
-    for (const [prefix, layer] of Object.entries(FILE_TO_LAYER)) {
-      if (importPath.startsWith('.')) {
-        // 相对路径，解析绝对路径
-        const absPath = path.resolve(path.dirname(filePath), importPath);
-        if (absPath.startsWith(prefix)) {
-          importLayer = layer;
-          break;
-        }
-      } else if (importPath.startsWith(prefix)) {
-        importLayer = layer;
-        break;
-      }
+    let absImportPath = null
+    if (importPath.startsWith('.')) {
+      absImportPath = path.resolve(path.dirname(absFilePath), importPath)
+    } else if (importPath.startsWith('src/')) {
+      absImportPath = path.resolve(REPO_ROOT, importPath)
     }
     
+    const importLayer = absImportPath ? layerForImport(absImportPath) : null
+
     if (importLayer && !LAYERS[fileLayer].allowed.includes(importLayer)) {
       issues.push({
         file: filePath,

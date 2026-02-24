@@ -1,103 +1,73 @@
-#!/bin/bash
-# ClawStation 预提交检查脚本
-# 在推送前运行完整验证，确保 CI 不会失败
+#!/usr/bin/env bash
+# ClawStation pre-push check
+# Run a full, debuggable suite locally to mirror CI expectations.
 
-set -e
+set -euo pipefail
 
-echo "🔍 ClawStation 预提交检查"
-echo "=========================="
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "$REPO_ROOT"
 
-# 颜色定义
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+echo "🔍 ClawStation pre-push check"
+echo "=============================="
+
+# Color only when interactive.
+if [[ -t 1 ]]; then
+  RED='\033[0;31m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[1;33m'
+  NC='\033[0m'
+else
+  RED=''
+  GREEN=''
+  YELLOW=''
+  NC=''
+fi
 
 FAILED=0
 
-# 检查前端代码
+run_check() {
+  local label="$1"
+  shift
+  printf "  %b%s%b\n" "$YELLOW" "$label" "$NC"
+  if "$@"; then
+    printf "  %b✓%b %s\n" "$GREEN" "$NC" "$label"
+  else
+    printf "  %b✗%b %s\n" "$RED" "$NC" "$label"
+    FAILED=1
+  fi
+}
+
 echo ""
-echo "📦 前端检查"
-echo "------------"
+echo "📦 Frontend"
+echo "-----------"
+run_check "TypeScript type-check" npm run type-check
+run_check "ESLint" npm run lint
+run_check "Layer lint" npm run layer-lint
+run_check "Doc check" npm run doc-check
+run_check "Unit tests (coverage)" npm run test:coverage
+run_check "Build" npm run build
 
-# TypeScript 类型检查
-echo "  🔍 TypeScript 类型检查..."
-if npm run type-check 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} 类型检查通过"
-else
-    echo "  ${RED}✗${NC} 类型检查失败"
-    FAILED=1
-fi
-
-# ESLint 检查
-echo "  🔍 ESLint 检查..."
-if npm run lint 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} ESLint 通过"
-else
-    echo "  ${RED}✗${NC} ESLint 失败"
-    FAILED=1
-fi
-
-# 前端测试
-echo "  🔍 前端测试..."
-if npm test 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} 前端测试通过"
-else
-    echo "  ${RED}✗${NC} 前端测试失败"
-    FAILED=1
-fi
-
-# 检查后端代码
 echo ""
-echo "⚙️  后端检查 (Rust)"
-echo "-------------------"
+echo "⚙️  Backend (Rust)"
+echo "-----------------"
+pushd src-tauri >/dev/null
+run_check "rustfmt" cargo fmt -- --check
+run_check "clippy" cargo clippy --all-targets -- -D warnings
+run_check "tests" cargo test
+popd >/dev/null
 
-cd src-tauri
-
-# 格式化检查
-echo "  🔍 Rust 格式化检查..."
-if cargo fmt -- --check 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} 格式化检查通过"
-else
-    echo "  ${RED}✗${NC} 格式化检查失败"
-    echo "     运行 'cargo fmt' 修复"
-    FAILED=1
-fi
-
-# Clippy 检查
-echo "  🔍 Clippy 检查..."
-if cargo clippy --all-targets -- -D warnings 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} Clippy 检查通过"
-else
-    echo "  ${RED}✗${NC} Clippy 检查失败"
-    FAILED=1
-fi
-
-# Rust 测试
-echo "  🔍 Rust 测试..."
-if cargo test 2>/dev/null; then
-    echo "  ${GREEN}✓${NC} Rust 测试通过"
-else
-    echo "  ${RED}✗${NC} Rust 测试失败"
-    FAILED=1
-fi
-
-cd ..
-
-# 总结
 echo ""
-echo "=========================="
-if [ $FAILED -eq 0 ]; then
-    echo "${GREEN}✅ 所有检查通过！可以安全推送。${NC}"
-    echo ""
-    echo "推送命令:"
-    echo "  git push origin main"
-    exit 0
-else
-    echo "${RED}❌ 检查失败，请修复后再推送。${NC}"
-    echo ""
-    echo "常见修复:"
-    echo "  npm run format    # 格式化前端代码"
-    echo "  cargo fmt         # 格式化 Rust 代码"
-    exit 1
+echo "=============================="
+if [[ "$FAILED" -eq 0 ]]; then
+  printf "%b✅ All checks passed — safe to push.%b\n" "$GREEN" "$NC"
+  exit 0
 fi
+
+printf "%b❌ Checks failed — fix issues and re-run.%b\n" "$RED" "$NC"
+echo ""
+echo "Common fixes:"
+echo "  npm run format     # auto-fix frontend lint issues"
+echo "  npm run codex:fix   # have Codex CLI attempt an automated fix"
+echo "  cargo fmt          # format Rust code (run in src-tauri/)"
+exit 1

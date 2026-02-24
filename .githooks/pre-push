@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if ./scripts/pre-push-check.sh; then
+  exit 0
+fi
+
+echo ""
+echo "❌ pre-push checks failed."
+echo "Fix locally, commit the changes, then push again."
+echo ""
+echo "Tip:"
+echo "  npm run codex:fix   # let Codex CLI attempt a fix"
+exit 1

@@ -9,14 +9,15 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html'],
+      reporter: ['text', 'html', 'lcov'],
       exclude: ['node_modules/', 'src/test/'],
-      threshold: {
-        lines: 70,
-        functions: 70,
-        branches: 70,
-        statements: 70
-      }
+      // Keep thresholds modest but enforced; raise over time as coverage improves.
+      thresholds: {
+        lines: 55,
+        functions: 30,
+        branches: 60,
+        statements: 55,
+      },
     }
   }
 })

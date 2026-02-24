@@ -212,7 +212,10 @@ describe('SessionStore', () => {
     const state = useSessionStore.getState()
     expect(state.streamingMessage).toBeNull()
     expect(state.messages[sessionKey].length).toBe(1)
-    expect(state.messages[sessionKey][0].content[0].text).toBe('Final summary')
+    const part = state.messages[sessionKey][0].content[0]
+    expect(part.type).toBe('text')
+    if (part.type !== 'text') throw new Error('Expected text content part')
+    expect(part.text).toBe('Final summary')
   })
 
   it('should maintain sessions array order', async () => {

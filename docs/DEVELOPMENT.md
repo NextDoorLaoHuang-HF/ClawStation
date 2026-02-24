@@ -23,7 +23,7 @@
 |------|----------|----------|
 | Node.js | 18.0.0 | 20.x LTS |
 | Rust | 1.77.0 | 1.80+ |
-| pnpm | 8.0.0 | 9.x |
+| npm | 9.x | 10.x |
 
 ### 安装步骤
 
@@ -46,7 +46,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 ```
 
-#### 3. 安装 pnpm
+#### 3. （可选）安装 pnpm
 
 ```bash
 npm install -g pnpm
@@ -79,14 +79,11 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev
 git clone https://github.com/openclaw/clawstation.git
 cd clawstation
 
-# 安装前端依赖
-pnpm install
+# 安装依赖（仓库包含 package-lock.json，CI 默认使用 npm）
+npm ci
 
-# 安装 Tauri CLI
-pnpm add -D @tauri-apps/cli
-
-# 验证安装
-pnpm tauri --version
+# 启动开发（桌面应用）
+npm run tauri:dev
 ```
 
 ### IDE 配置
@@ -835,7 +832,7 @@ lsof -i :18789
 
 ```bash
 # 重启开发服务器
-pnpm tauri dev
+npm run tauri:dev
 
 # 清除缓存
 rm -rf node_modules/.vite

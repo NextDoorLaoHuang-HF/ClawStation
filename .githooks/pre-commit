@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if ./scripts/pre-commit-check.sh; then
+  exit 0
+fi
+
+echo ""
+echo "❌ pre-commit checks failed."
+echo "Fix locally, then re-commit."
+echo ""
+echo "Tips:"
+echo "  npm run fix                # auto-fix formatting"
+echo "  npm run codex:fix:pre-commit  # let Codex CLI attempt a fix"
+exit 1

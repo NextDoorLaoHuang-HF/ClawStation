@@ -45,13 +45,13 @@ git clone https://github.com/NextDoorLaoHuang-HF/ClawStation.git
 cd ClawStation
 
 # 安装依赖
-npm install
+npm ci
 
 # 开发模式运行
-npm run tauri dev
+npm run tauri:dev
 
 # 构建发布版本
-npm run tauri build
+npm run tauri:build
 ```
 
 ### 首次启动

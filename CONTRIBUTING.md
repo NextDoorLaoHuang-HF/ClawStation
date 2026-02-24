@@ -130,19 +130,16 @@ git push origin feature/your-feature-name
 
 - Node.js 18+
 - Rust 1.77+
-- pnpm (推荐)
+- npm（仓库包含 `package-lock.json`，CI 默认使用 npm）
 
 ### 安装步骤
 
 ```bash
 # 安装依赖
-pnpm install
-
-# 安装 Tauri CLI
-pnpm add -D @tauri-apps/cli
+npm ci
 
 # 启动开发服务器
-pnpm tauri dev
+npm run tauri:dev
 ```
 
 ### 项目结构
@@ -235,7 +232,8 @@ mod tests {
 
 ### 测试覆盖率
 
-目标：≥80%
+当前门禁：前端覆盖率阈值由 `vitest.config.ts` 强制（后续逐步提升）。
+长期目标：≥80%（见 `docs/ROADMAP.md` / `docs/QUALITY-IMPROVEMENT.md`）。
 
 ```bash
 # 前端

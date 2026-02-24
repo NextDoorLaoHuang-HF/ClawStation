@@ -93,33 +93,14 @@
 
 ## 质量检查脚本
 
+- `./scripts/quality-check.sh`：运行 `npm run check`（前端 + Rust 全量门禁）
+- `./scripts/self-review.sh`：本地自审入口（输出更适合快速 review）
+- `./scripts/update-quality.sh`：生成 `docs/QUALITY_STATUS.md`（自动汇总信号，如覆盖率摘要）
+
+如仅需要前端门禁，可运行：
+
 ```bash
-#!/bin/bash
-# scripts/quality-check.sh
-
-echo "🔍 运行质量检查..."
-
-# 1. 类型检查
-echo "📦 TypeScript 类型检查..."
-npm run type-check
-
-# 2. Lint
-echo "🔧 ESLint 检查..."
-npm run lint
-
-# 3. 测试覆盖率
-echo "🧪 测试覆盖率..."
-npm run test:coverage
-
-# 4. 分层架构检查
-echo "🏗️ 分层架构检查..."
-node scripts/layer-lint.js
-
-# 5. 文档检查
-echo "📚 文档完整性检查..."
-node scripts/doc-check.js
-
-echo "✅ 质量检查完成"
+npm run check:frontend
 ```
 
 ---
