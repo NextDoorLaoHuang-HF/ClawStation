@@ -286,7 +286,9 @@ jobs:
           # Escape according to workflow command rules:
           # https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions
           # Keep it one-line to reduce the chance of workflow-command parsing issues.
-          ONE_LINE="$(tail -n 40 tauri-build.log 2>/dev/null | tr '\n' ' ' | tr '\r' ' ' | sed 's/%/%25/g')"
+          # Keep the annotation small to avoid any server-side truncation/ignores.
+          ONE_LINE="$(tail -n 10 tauri-build.log 2>/dev/null | tr '\n' ' ' | tr '\r' ' ')"
+          ONE_LINE="$(printf '%s' "$ONE_LINE" | sed 's/%/%25/g' | cut -c1-1000)"
           echo "::error file=.github/workflows/build.yml,line=1,col=1,title=Tauri build failed (macOS ${{ matrix.target }})::${ONE_LINE}"
 
           # Keep the job failed.
