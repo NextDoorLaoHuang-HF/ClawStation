@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.7] - 2026-02-24
+
+### Fixed
+- GitHub Actions: macOS artifact packaging step now correctly zips the produced `ClawStation.app`
+
+---
+
 ## [1.0.6] - 2026-02-24
 
 ### Fixed
