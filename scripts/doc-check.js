@@ -63,6 +63,25 @@ function main() {
     if (!exists(rel)) issues.push(`[missing file] ${rel}`)
   }
 
+  // Validate that referenced Tauri bundle icon paths exist.
+  // This prevents "tauri build" failures that only show up on macOS/Windows bundling.
+  const tauriConfRel = 'src-tauri/tauri.conf.json'
+  if (exists(tauriConfRel)) {
+    try {
+      const conf = JSON.parse(readText(tauriConfRel))
+      const icons = conf?.bundle?.icon ?? []
+      if (Array.isArray(icons)) {
+        for (const iconRel of icons) {
+          if (typeof iconRel !== 'string' || iconRel.trim() === '') continue
+          const fullRel = path.posix.join('src-tauri', iconRel)
+          if (!exists(fullRel)) issues.push(`[missing tauri icon] ${tauriConfRel}: ${iconRel}`)
+        }
+      }
+    } catch (e) {
+      issues.push(`[invalid json] ${tauriConfRel}: ${String(e)}`)
+    }
+  }
+
   const scanFiles = unique([
     'README.md',
     'CHANGELOG.md',
