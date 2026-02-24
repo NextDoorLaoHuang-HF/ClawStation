@@ -13,6 +13,7 @@
 ## Build, Test, and Development Commands
 
 - Install deps (lockfile is `package-lock.json`): `npm ci`
+- Use the repo Node version: `cat .nvmrc` (CI uses the same)
 - Frontend dev server: `npm run dev`
 - Production frontend build: `npm run build` (runs `tsc` + `vite build`)
 - Preview built frontend: `npm run preview`

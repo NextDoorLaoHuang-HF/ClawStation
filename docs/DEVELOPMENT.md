@@ -21,7 +21,7 @@
 
 | 组件 | 最低版本 | 推荐版本 |
 |------|----------|----------|
-| Node.js | 18.0.0 | 20.x LTS |
+| Node.js | 20.19.0 | 22.12.0+ (LTS) |
 | Rust | 1.77.0 | 1.80+ |
 | npm | 9.x | 10.x |
 
@@ -32,8 +32,8 @@
 ```bash
 # 使用 nvm (推荐)
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 20
-nvm use 20
+nvm install 22.12.0
+nvm use 22.12.0
 
 # 或使用官方安装包
 # https://nodejs.org/

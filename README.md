@@ -78,7 +78,7 @@
 
 ### 前提条件
 
-- [Node.js](https://nodejs.org) 18+ 
+- [Node.js](https://nodejs.org) ^20.19.0 or >=22.12.0（推荐使用 `.nvmrc` 指定的版本）
 - [Rust](https://www.rust-lang.org/tools/install) 1.77+
 - npm（仓库包含 `package-lock.json`，CI 默认使用 npm）
 
