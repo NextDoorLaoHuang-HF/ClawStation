@@ -199,6 +199,7 @@ jobs:
     runs-on: macos-latest
     needs: [lint, frontend, test]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-apple-darwin
@@ -251,7 +252,31 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build Tauri bundles
-        run: npm run tauri:build -- --target ${{ matrix.target }}
+        id: tauri_build
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+
+          # Capture full output so we can surface it in the job summary on failure.
+          # Build the .app bundle (DMG is optional and can be flaky on CI).
+          npm run tauri:build -- --target ${{ matrix.target }} --bundles app --verbose 2>&1 | tee tauri-build.log
+          echo "exit_code=0" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize Tauri build failure
+        if: steps.tauri_build.outcome != 'success'
+        run: |
+          {
+            echo "## Tauri build failed (macOS ${{ matrix.target }})"
+            echo ""
+            echo "Last 200 lines of output:"
+            echo ""
+            echo '```'
+            tail -n 200 tauri-build.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Keep the job failed.
+          exit 1
 
       - name: Prepare macOS artifacts
         run: |
