@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.6] - 2026-02-24
+
+### Fixed
+- macOS bundling: add missing `src-tauri/icons/128x128@2x.png` so `tauri build` can produce `ClawStation.app`
+
+---
+
 ## [1.0.5] - 2026-02-24
 
 ### Fixed
