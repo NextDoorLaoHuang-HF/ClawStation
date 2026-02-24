@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.3] - 2026-02-24
+
+### Added
+- CI/build troubleshooting section in `docs/DEVELOPMENT.md`
+- Local quality gates: pre-commit + pre-push checks (scripts + git hooks)
+
+### Changed
+- Pinned Node version via `.nvmrc` and aligned CI to use it
+- CI now upgrades npm to a stable version to avoid intermittent `npm ci` crashes
+- Normalized `package-lock.json` `resolved` URLs to `https://registry.npmjs.org/` for CI reliability
+
+---
+
 ## [1.0.2] - 2026-02-24
 
 ### Changed
