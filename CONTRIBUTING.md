@@ -128,7 +128,7 @@ git push origin feature/your-feature-name
 
 ### 前提条件
 
-- Node.js ^20.19.0 或 >=22.12.0（推荐使用 `.nvmrc` 指定的版本）
+- Node.js ^20.19.0 或 >=22.13.0（推荐使用 `.nvmrc` 指定的版本）
 - Rust 1.77+
 - npm（仓库包含 `package-lock.json`，CI 默认使用 npm）
 
