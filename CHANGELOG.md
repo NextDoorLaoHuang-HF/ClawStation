@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - 2026-02-24
+
+### Changed
+- Disabled crates.io publish step in CI (desktop app doesn't need crate publishing)
+- Updated package.json version to match Tauri version
+
+---
+
+## [1.0.1] - 2026-02-24
+
+### Added
+- macOS arm64 (Apple Silicon) build support in CI
+
+### Fixed
+- FileBrowser now connects to backend API correctly
+- File preview functionality working
+
+---
+
 ## [1.1.0] - Planned 2026-03-01
 
 ### Added
