@@ -12,6 +12,9 @@
 4. [后端架构](#后端架构)
 5. [API 接口说明](#api-接口说明)
 6. [调试技巧](#调试技巧)
+7. [CI / 构建排障](#ci--构建排障)
+8. [性能优化](#性能优化)
+9. [贡献指南](#贡献指南)
 
 ---
 
@@ -849,6 +852,36 @@ cargo build
 
 ---
 
+## CI / 构建排障
+
+### 基线环境（与 CI 对齐）
+
+- Node.js：使用 `.nvmrc`（当前为 22.13.0）；CI 也会读取该文件。
+- npm：CI 会升级到 npm 10.9.4（用于规避 GitHub runner 上偶发的 `npm ci` 崩溃）。
+- 依赖源：提交的 `package-lock.json` 使用 `https://registry.npmjs.org/` 的 `resolved`，避免 CI 访问不到私有/地区镜像。
+
+### 本地复现 CI（Frontend）
+
+```bash
+rm -rf node_modules
+npm ci --include=dev --no-audit --no-fund
+npm run check:frontend
+```
+
+### 常见失败与处理
+
+#### 1. `TS2688: Cannot find type definition file for 'vite/client'`
+
+- 含义：`vite` 未安装或 types 未解析（通常是 devDependencies 未安装）。
+- 处理：确认 Node 版本满足 Vite 的 engines；重新执行 `npm ci --include=dev`，并检查 `node_modules/vite/client.d.ts` 是否存在。
+
+#### 2. `npm error Exit handler never called!`
+
+- 含义：npm 自身异常（非项目代码问题）。
+- 处理：升级 npm 后重试（本地可执行 `npm i -g npm@10.9.4`；CI 已自动处理）。
+
+---
+
 ## 性能优化
 
 ### 前端优化
@@ -877,4 +910,4 @@ cargo build
 
 ---
 
-*最后更新: 2026-02-23*
+*最后更新: 2026-02-24*
