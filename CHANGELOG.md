@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.4] - 2026-02-24
+
+### Fixed
+- macOS release artifacts now include a double-clickable `ClawStation.app` bundle (`*.app.zip`)
+- Removed invalid `plugins.fs.scope` config that caused Tauri startup crashes
+
+### Changed
+- Use `tauri_build::build()` in `src-tauri/build.rs`
+- Ignore generated `src-tauri/gen/` files
+
+---
+
 ## [1.0.3] - 2026-02-24
 
 ### Added
