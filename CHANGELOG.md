@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.8] - 2026-02-25
+
+### Added
+- Settings modal (Gateway + Plugins)
+- Release gates: `npm run release-gate` + `npm run tauri-command-lint`
+- Tauri API client mappings + invoke contract tests
+
+### Changed
+- Sessions now send via Tauri backend in-app and stream agent output via events
+- Backend `send_message` now forwards chat requests to the Gateway
+- Header/Sidebar now use real Gateway connection state + open settings modal
+
+---
+
 ## [1.0.7] - 2026-02-24
 
 ### Fixed
