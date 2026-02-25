@@ -276,15 +276,15 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     const unlistenGateway = await listen<GatewayEvent>('gateway', (event) => {
       const { activeProfileId, connections } = get();
       const updatedConnections = new Map(connections);
-      const payload = event.payload;
+      const gatewayEvent = event.payload;
       
-      switch (payload.type) {
+      switch (gatewayEvent.type) {
         case 'connected':
-          if (activeProfileId && 'protocol' in payload) {
+          if (activeProfileId && typeof (gatewayEvent.payload as { protocol?: number })?.protocol === 'number') {
             updatedConnections.set(activeProfileId, {
               profileId: activeProfileId,
               status: 'connected',
-              protocol: (payload as { protocol: number }).protocol,
+              protocol: (gatewayEvent.payload as { protocol: number }).protocol,
             });
           }
           break;
@@ -300,11 +300,11 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
           break;
           
         case 'error':
-          if (activeProfileId && 'message' in payload) {
+          if (activeProfileId && typeof (gatewayEvent.payload as { message?: string })?.message === 'string') {
             updatedConnections.set(activeProfileId, {
               profileId: activeProfileId,
               status: 'error',
-              error: (payload as { message: string }).message,
+              error: (gatewayEvent.payload as { message: string }).message,
             });
           }
           break;

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+use crate::gateway::WsMessage;
 use crate::AppState;
 
 // ============== Types ==============
@@ -149,6 +150,11 @@ pub struct AbortResult {
     pub stopped: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AbortSessionParams {
+    pub session_key: String,
+}
+
 // ============== Session Manager ==============
 
 pub struct SessionManager {
@@ -235,14 +241,16 @@ pub async fn get_history(
 pub async fn send_message(
     params: SendMessageParams,
     state: State<'_, AppState>,
-    app: AppHandle,
 ) -> Result<(), String> {
-    let sessions = state.sessions.read().await;
-
-    // Check if session exists
-    if !sessions.sessions.contains_key(&params.session_key) {
-        return Err(format!("Session not found: {}", params.session_key));
-    }
+    let agent_id = {
+        let sessions = state.sessions.read().await;
+        // Check if session exists
+        let session = sessions
+            .sessions
+            .get(&params.session_key)
+            .ok_or_else(|| format!("Session not found: {}", params.session_key))?;
+        session.agent_id.clone()
+    };
 
     // Add user message to history
     let timestamp = chrono::Utc::now().timestamp_millis();
@@ -255,7 +263,6 @@ pub async fn send_message(
     };
 
     // Update session history
-    drop(sessions);
     let mut sessions_mgr = state.sessions.write().await;
     sessions_mgr
         .history
@@ -263,27 +270,49 @@ pub async fn send_message(
         .or_insert_with(Vec::new)
         .push(message);
 
-    // Emit message sent event
-    let _ = app.emit(
-        "agent",
-        serde_json::json!({
-            "sessionKey": params.session_key,
-            "type": "text",
-            "payload": { "text": params.message }
-        }),
-    );
+    // Forward to Gateway (OpenClaw operator RPC: op=chat)
+    let sender = {
+        let gateway = state.gateway.read().await;
+        if !gateway.status.connected {
+            return Err("Gateway not connected".to_string());
+        }
+        gateway
+            .sender
+            .clone()
+            .ok_or_else(|| "Gateway sender not available".to_string())?
+    };
 
-    // In a real implementation, this would forward to the Gateway
-    // and the agent would process the message
+    let req_id = Uuid::new_v4().to_string();
+    let idempotency_key = Uuid::new_v4().to_string();
+
+    let gw_params = serde_json::json!({
+        "op": "chat",
+        "message": params.message,
+        "agentId": agent_id,
+        "sessionKey": params.session_key,
+        "idempotencyKey": idempotency_key,
+        "deliver": true,
+        "timeoutMs": 5 * 60 * 1000,
+    });
+
+    sender
+        .send(WsMessage::Request {
+            id: req_id,
+            method: "chat".to_string(),
+            params: gw_params,
+        })
+        .await
+        .map_err(|e| format!("Failed to send to gateway: {}", e))?;
 
     Ok(())
 }
 
 #[tauri::command]
 pub async fn abort_session(
-    session_key: String,
+    params: AbortSessionParams,
     state: State<'_, AppState>,
 ) -> Result<AbortResult, String> {
+    let session_key = params.session_key;
     let sessions = state.sessions.read().await;
 
     // Check if session exists

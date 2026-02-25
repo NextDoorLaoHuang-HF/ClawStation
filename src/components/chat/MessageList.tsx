@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
  * 显示当前会话的所有消息，支持自动滚动到底部
  */
 export const MessageList: React.FC = () => {
-  const { activeSessionKey, messages, isLoading, streamingMessage } = useSessionStore();
+  const { activeSessionKey, messages, isLoading, streamingMessage, error, clearError } = useSessionStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentMessages = useMemo(() => 
     activeSessionKey ? messages[activeSessionKey] || [] : [],
@@ -28,6 +28,20 @@ export const MessageList: React.FC = () => {
     return (
       <div className="h-full flex items-center justify-center">
         <div className="text-center">
+          {error && (
+            <div className="mb-4 max-w-md rounded-lg bg-red-50 p-3 text-left text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 break-words">{error}</div>
+                <button
+                  type="button"
+                  onClick={clearError}
+                  className="flex-shrink-0 text-xs text-red-700 hover:underline dark:text-red-300"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           <div className="text-4xl mb-4">👋</div>
           <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-2">
             Start a conversation
@@ -45,6 +59,22 @@ export const MessageList: React.FC = () => {
       ref={scrollRef}
       className="h-full overflow-y-auto claw-scrollbar p-4 space-y-4"
     >
+      {/* 错误提示 */}
+      {error && (
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 break-words">{error}</div>
+            <button
+              type="button"
+              onClick={clearError}
+              className="flex-shrink-0 text-xs text-red-700 hover:underline dark:text-red-300"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 消息列表 */}
       {currentMessages.map((message, index) => (
         <MessageItem 

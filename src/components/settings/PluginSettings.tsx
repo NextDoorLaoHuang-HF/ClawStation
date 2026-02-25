@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, FolderOpen, RefreshCw } from 'lucide-react';
 import { PluginList } from './PluginList';
 import { plugins, type PluginInfo } from '../../lib/api';
@@ -10,6 +10,7 @@ export const PluginSettings: React.FC = () => {
   const [sourceInput, setSourceInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const clearMessageTimerRef = useRef<number | null>(null);
 
   const loadPlugins = useCallback(async () => {
     setLoading(true);
@@ -28,7 +29,21 @@ export const PluginSettings: React.FC = () => {
     loadPlugins();
   }, [loadPlugins]);
 
+  useEffect(() => {
+    return () => {
+      if (clearMessageTimerRef.current !== null) {
+        window.clearTimeout(clearMessageTimerRef.current);
+        clearMessageTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const showMessage = (msg: string, isError = false) => {
+    if (clearMessageTimerRef.current !== null) {
+      window.clearTimeout(clearMessageTimerRef.current);
+      clearMessageTimerRef.current = null;
+    }
+
     if (isError) {
       setError(msg);
       setSuccess(null);
@@ -36,9 +51,10 @@ export const PluginSettings: React.FC = () => {
       setSuccess(msg);
       setError(null);
     }
-    setTimeout(() => {
+    clearMessageTimerRef.current = window.setTimeout(() => {
       setError(null);
       setSuccess(null);
+      clearMessageTimerRef.current = null;
     }, 3000);
   };
 

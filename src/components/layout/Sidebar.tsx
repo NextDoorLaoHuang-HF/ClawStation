@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot, Settings, Plus, ChevronRight } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
+import { useUIStore } from '../../stores/uiStore';
 import type { AgentInfo } from '../../types';
 
 /**
@@ -10,6 +11,7 @@ import type { AgentInfo } from '../../types';
  */
 export const Sidebar: React.FC = () => {
   const { agents, currentAgentId, setCurrentAgent, isLoading } = useAgentStore();
+  const openSettings = useUIStore((s) => s.openSettings);
 
   const handleAgentClick = async (agentId: string) => {
     if (agentId !== currentAgentId && !isLoading) {
@@ -68,8 +70,7 @@ export const Sidebar: React.FC = () => {
         <button
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-tertiary)] hover:text-[var(--color-text-primary)] transition-colors"
           onClick={() => {
-            // TODO: 打开设置
-            console.log('Open settings');
+            openSettings('gateway');
           }}
         >
           <Settings className="w-4 h-4" />

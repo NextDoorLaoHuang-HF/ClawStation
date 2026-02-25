@@ -1,6 +1,7 @@
 import React from 'react';
 import { Menu, Minimize2, Maximize2, X, Wifi, WifiOff } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
+import { useGatewayStore } from '../../stores/gatewayStore';
 
 /**
  * Header - 顶部工具栏组件
@@ -10,9 +11,11 @@ import { useAgentStore } from '../../stores/agentStore';
 export const Header: React.FC = () => {
   const { getCurrentAgent } = useAgentStore();
   const currentAgent = getCurrentAgent();
-  
-  // Mock 连接状态
-  const isConnected = true;
+
+  const { profiles, connections, activeProfileId } = useGatewayStore();
+  const activeProfile = profiles.find((p) => p.id === activeProfileId);
+  const activeConn = activeProfileId ? connections.get(activeProfileId) : undefined;
+  const status = activeConn?.status || 'disconnected';
 
   return (
     <div className="h-12 flex items-center justify-between px-4 bg-[var(--color-bg-secondary)] border-b border-[var(--color-border)]">
@@ -38,17 +41,14 @@ export const Header: React.FC = () => {
 
       {/* 中间 - 连接状态 */}
       <div className="flex items-center gap-2 text-sm">
-        {isConnected ? (
-          <>
-            <Wifi className="w-4 h-4 text-green-500" />
-            <span className="text-[var(--color-text-muted)]">Connected</span>
-          </>
-        ) : (
-          <>
-            <WifiOff className="w-4 h-4 text-red-500" />
-            <span className="text-[var(--color-text-muted)]">Disconnected</span>
-          </>
-        )}
+        {status === 'connected' ? <Wifi className="w-4 h-4 text-green-500" />
+          : status === 'connecting' ? <Wifi className="w-4 h-4 text-amber-500" />
+            : <WifiOff className="w-4 h-4 text-red-500" />
+        }
+        <span className="text-[var(--color-text-muted)]">
+          {status === 'connected' ? 'Connected' : status === 'connecting' ? 'Connecting…' : 'Disconnected'}
+          {activeProfile ? ` • ${activeProfile.name}` : ''}
+        </span>
       </div>
 
       {/* 右侧 - 窗口控制 */}

@@ -18,6 +18,8 @@
     "tauri:icon": "tauri icon",
     "layer-lint": "node scripts/layer-lint.js",
     "doc-check": "node scripts/doc-check.js",
+    "release-gate": "node scripts/release-gate.js",
+    "tauri-command-lint": "node scripts/tauri-command-lint.js",
     "hooks:install": "./scripts/install-git-hooks.sh",
     "fix:frontend": "npm run format",
     "fix:backend": "cargo fmt --manifest-path src-tauri/Cargo.toml",
@@ -26,7 +28,7 @@
     "codex:fix:frontend": "./scripts/codex-fix.sh frontend",
     "codex:fix:backend": "./scripts/codex-fix.sh backend",
     "codex:fix:pre-commit": "./scripts/codex-fix.sh pre-commit",
-    "check:frontend": "npm run type-check && npm run lint && npm run layer-lint && npm run doc-check && npm run test:coverage && npm run build",
+    "check:frontend": "npm run type-check && npm run lint && npm run layer-lint && npm run doc-check && npm run release-gate && npm run tauri-command-lint && npm run test:coverage && npm run build",
     "check:backend": "cd src-tauri && cargo fmt -- --check && cargo clippy --all-targets -- -D warnings && cargo test",
     "check": "./scripts/pre-push-check.sh",
     "type-check": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit"

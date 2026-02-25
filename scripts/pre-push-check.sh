@@ -45,6 +45,8 @@ run_check "TypeScript type-check" npm run type-check
 run_check "ESLint" npm run lint
 run_check "Layer lint" npm run layer-lint
 run_check "Doc check" npm run doc-check
+run_check "Release gate" npm run release-gate
+run_check "Tauri command lint" npm run tauri-command-lint
 run_check "Unit tests (coverage)" npm run test:coverage
 run_check "Build" npm run build
 

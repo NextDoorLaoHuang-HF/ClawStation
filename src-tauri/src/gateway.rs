@@ -442,14 +442,7 @@ pub async fn connect(
         "permissions": {},
         "auth": { "token": token },
         "locale": "en-US",
-        "userAgent": format!("clawstation/{}", env!("CARGO_PKG_VERSION")),
-        "device": {
-            "id": "clawstation-desktop",
-            "publicKey": "",
-            "signature": "",
-            "signedAt": chrono::Utc::now().timestamp_millis(),
-            "nonce": ""
-        }
+        "userAgent": format!("clawstation/{}", env!("CARGO_PKG_VERSION"))
     });
 
     let connect_req = WsMessage::Request {
@@ -482,6 +475,44 @@ async fn handle_ws_message(
     app: &AppHandle,
     _state: &Arc<RwLock<GatewayState>>,
 ) {
+    fn extract_text(value: &serde_json::Value) -> Option<String> {
+        match value {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Object(map) => {
+                // Common shapes: { delta: "..." }, { text: "..." }, { message: ... }
+                if let Some(s) = map.get("delta").and_then(|v| v.as_str()) {
+                    return Some(s.to_string());
+                }
+                if let Some(s) = map.get("text").and_then(|v| v.as_str()) {
+                    return Some(s.to_string());
+                }
+                if let Some(msg) = map.get("message") {
+                    if let Some(s) = extract_text(msg) {
+                        return Some(s);
+                    }
+                }
+
+                // Message-like: { content: [{ type: "text", text: "..." }, ...] }
+                if let Some(content) = map.get("content").and_then(|v| v.as_array()) {
+                    let mut out = String::new();
+                    for part in content {
+                        if let Some("text") = part.get("type").and_then(|t| t.as_str()) {
+                            if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                                out.push_str(text);
+                            }
+                        }
+                    }
+                    if !out.is_empty() {
+                        return Some(out);
+                    }
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
+
     if let Some(msg_type) = msg.get("type").and_then(|v| v.as_str()) {
         match msg_type {
             "res" => {
@@ -497,10 +528,111 @@ async fn handle_ws_message(
             "event" => {
                 if let Some(event_name) = msg.get("event").and_then(|v| v.as_str()) {
                     tracing::debug!("Received event: {}", event_name);
-                    // Handle specific events
+                    let payload = msg
+                        .get("payload")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+
+                    // Translate OpenClaw operator events into a simpler AgentEvent shape
+                    // that the frontend SessionStore already understands.
                     match event_name {
-                        "session.started" | "session.completed" | "session.error" => {
-                            let _ = app.emit("agent", msg);
+                        "session.started" => {
+                            if let (Some(run_id), Some(session_key)) = (
+                                payload.get("runId").and_then(|v| v.as_str()),
+                                payload.get("sessionKey").and_then(|v| v.as_str()),
+                            ) {
+                                let _ = app.emit(
+                                    "agent",
+                                    serde_json::json!({
+                                        "sessionKey": session_key,
+                                        "runId": run_id,
+                                        "type": "started",
+                                        "payload": {}
+                                    }),
+                                );
+                            }
+                        }
+                        "session.error" => {
+                            if let (Some(run_id), Some(session_key)) = (
+                                payload.get("runId").and_then(|v| v.as_str()),
+                                payload.get("sessionKey").and_then(|v| v.as_str()),
+                            ) {
+                                let err = payload
+                                    .get("errorMessage")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown error");
+                                let _ = app.emit(
+                                    "agent",
+                                    serde_json::json!({
+                                        "sessionKey": session_key,
+                                        "runId": run_id,
+                                        "type": "error",
+                                        "payload": { "error": err }
+                                    }),
+                                );
+                            }
+                        }
+                        "chat" => {
+                            let run_id = payload.get("runId").and_then(|v| v.as_str());
+                            let session_key = payload.get("sessionKey").and_then(|v| v.as_str());
+                            let state = payload.get("state").and_then(|v| v.as_str()).unwrap_or("");
+                            if let (Some(run_id), Some(session_key)) = (run_id, session_key) {
+                                match state {
+                                    "delta" => {
+                                        if let Some(delta) =
+                                            payload.get("message").and_then(extract_text)
+                                        {
+                                            let _ = app.emit(
+                                                "agent",
+                                                serde_json::json!({
+                                                    "sessionKey": session_key,
+                                                    "runId": run_id,
+                                                    "type": "text",
+                                                    "payload": { "delta": delta }
+                                                }),
+                                            );
+                                        }
+                                    }
+                                    "final" => {
+                                        let summary = payload
+                                            .get("message")
+                                            .and_then(extract_text)
+                                            .or_else(|| {
+                                                payload.get("message").map(|m| m.to_string())
+                                            })
+                                            .unwrap_or_default();
+                                        let _ = app.emit(
+                                            "agent",
+                                            serde_json::json!({
+                                                "sessionKey": session_key,
+                                                "runId": run_id,
+                                                "type": "completed",
+                                                "payload": { "summary": summary }
+                                            }),
+                                        );
+                                    }
+                                    "error" | "aborted" => {
+                                        let err = payload
+                                            .get("errorMessage")
+                                            .and_then(|v| v.as_str())
+                                            .map(|s| s.to_string())
+                                            .or_else(|| {
+                                                payload.get("message").and_then(extract_text)
+                                            })
+                                            .unwrap_or_else(|| "Chat failed".to_string());
+                                        let _ = app.emit(
+                                            "agent",
+                                            serde_json::json!({
+                                                "sessionKey": session_key,
+                                                "runId": run_id,
+                                                "type": "error",
+                                                "payload": { "error": err }
+                                            }),
+                                        );
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                         "exec.approval.requested" => {
                             let _ = app.emit("approval", msg);

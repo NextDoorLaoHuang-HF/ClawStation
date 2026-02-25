@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AgentInfo, AgentConfig } from '../types';
+import { agents as agentsApi, isTauriRuntime } from '../lib/api';
 
 // Mock 数据
 const mockAgents: AgentInfo[] = [
@@ -60,9 +61,9 @@ interface AgentState {
 
 export const useAgentStore = create<AgentState>((set, get) => ({
   // 初始状态
-  agents: mockAgents,
+  agents: isTauriRuntime() ? [] : mockAgents,
   currentAgentId: 'main',
-  agentConfigs: mockConfigs,
+  agentConfigs: isTauriRuntime() ? {} : mockConfigs,
   isLoading: false,
   error: null,
 
@@ -70,12 +71,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   setCurrentAgent: async (agentId) => {
     set({ isLoading: true, error: null });
     try {
-      // TODO: 调用 Tauri API
-      // await invoke('switch_agent', { agentId });
-      
-      // Mock
-      await new Promise(resolve => setTimeout(resolve, 300));
-      set({ currentAgentId: agentId, isLoading: false });
+      if (!isTauriRuntime()) {
+        // Mock
+        await new Promise(resolve => setTimeout(resolve, 300));
+        set({ currentAgentId: agentId, isLoading: false });
+        return;
+      }
+
+      const result = await agentsApi.switch(agentId);
+      set({ currentAgentId: result.currentAgentId, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
@@ -84,13 +88,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   loadAgents: async () => {
     set({ isLoading: true, error: null });
     try {
-      // TODO: 调用 Tauri API
-      // const agents = await invoke('list_agents');
-      // set({ agents, isLoading: false });
-      
-      // Mock
-      await new Promise(resolve => setTimeout(resolve, 500));
-      set({ isLoading: false });
+      if (!isTauriRuntime()) {
+        // Mock
+        await new Promise(resolve => setTimeout(resolve, 500));
+        set({ isLoading: false });
+        return;
+      }
+
+      const agents = await agentsApi.list();
+      set({ agents, isLoading: false });
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
@@ -98,17 +104,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   loadAgentConfig: async (agentId) => {
     try {
-      // TODO: 调用 Tauri API
-      // const config = await invoke('get_agent_config', { agentId });
-      
-      // Mock
-      await new Promise(resolve => setTimeout(resolve, 200));
-      const config = mockConfigs[agentId];
-      if (config) {
-        set((state) => ({
-          agentConfigs: { ...state.agentConfigs, [agentId]: config },
-        }));
+      if (!isTauriRuntime()) {
+        // Mock
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const config = mockConfigs[agentId];
+        if (config) {
+          set((state) => ({
+            agentConfigs: { ...state.agentConfigs, [agentId]: config },
+          }));
+        }
+        return;
       }
+
+      const config = await agentsApi.getConfig(agentId);
+      set((state) => ({
+        agentConfigs: { ...state.agentConfigs, [agentId]: config },
+      }));
     } catch (error) {
       set({ error: String(error) });
     }

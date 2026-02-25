@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { mockIPC, clearMocks } from '@tauri-apps/api/mocks'
+import { emit } from '@tauri-apps/api/event'
 import * as api from '../api'
+
+afterEach(() => {
+  // Ensure tauri mocks don't leak into tests that rely on non-Tauri branches.
+  clearMocks()
+  delete (globalThis as unknown as { isTauri?: unknown }).isTauri
+  vi.unstubAllGlobals()
+})
 
 describe('API - Events', () => {
   it('should return unlisten function for onGateway', async () => {
@@ -26,6 +35,33 @@ describe('API - Events', () => {
     const unlisten = await api.events.onUpdate(() => {})
     expect(typeof unlisten).toBe('function')
   })
+
+  it('onFileWatch should map is_dir -> isDir (and default false)', async () => {
+    mockIPC(() => null, { shouldMockEvents: true })
+
+    const handler = vi.fn()
+    const unlisten = await api.events.onFileWatch(handler)
+
+    await emit('file-watch', { type: 'created', path: '/tmp/a', is_dir: true })
+    await emit('file-watch', { type: 'modified', path: '/tmp/b' })
+
+    expect(handler).toHaveBeenCalledWith({ type: 'created', path: '/tmp/a', isDir: true })
+    expect(handler).toHaveBeenCalledWith({ type: 'modified', path: '/tmp/b', isDir: false })
+
+    await unlisten()
+  })
+
+  it('onUpdate should listen and receive emitted events in Tauri runtime', async () => {
+    mockIPC(() => null, { shouldMockEvents: true })
+
+    const handler = vi.fn()
+    const unlisten = await api.events.onUpdate(handler)
+
+    await emit('update', { type: 'downloaded' })
+    expect(handler).toHaveBeenCalledWith({ type: 'downloaded' })
+
+    await unlisten()
+  })
 })
 
 describe('API - Error Handling', () => {
@@ -49,6 +85,15 @@ describe('API - Error Handling', () => {
     const error = new api.ApiError('Test error')
     expect(error).toBeInstanceOf(Error)
     expect(error).toBeInstanceOf(api.ApiError)
+  })
+
+  it('safeInvoke should wrap errors into ApiError with command', async () => {
+    await expect(api.safeInvoke('get_app_info')).rejects.toBeInstanceOf(api.ApiError)
+    try {
+      await api.safeInvoke('get_app_info')
+    } catch (e) {
+      expect((e as api.ApiError).command).toBe('get_app_info')
+    }
   })
 })
 
@@ -92,5 +137,36 @@ describe('API - Module Structure', () => {
     expect(typeof api.plugins.install).toBe('function')
     expect(typeof api.plugins.enable).toBe('function')
     expect(typeof api.plugins.disable).toBe('function')
+  })
+})
+
+describe('API - Runtime + Mapping', () => {
+  it('isTauriRuntime should prefer global isTauri flag when present', () => {
+    ;(globalThis as unknown as { isTauri?: unknown }).isTauri = true
+    expect(api.isTauriRuntime()).toBe(true)
+  })
+
+  it('system.getInfo maps snake_case keys and arch', async () => {
+    mockIPC((cmd) => {
+      if (cmd === 'get_app_info') {
+        return { name: 'app', version: '1', tauri_version: '2', platform: 'linux', arch: 'x86_64' }
+      }
+      throw new Error(`Unexpected command: ${cmd}`)
+    })
+
+    const info = await api.system.getInfo()
+    expect(info).toMatchObject({ name: 'app', version: '1', tauriVersion: '2', platform: 'linux', arch: 'x64' })
+  })
+
+  it('plugins.getContributions invokes get_plugin_contributions', async () => {
+    const calls: string[] = []
+    mockIPC((cmd) => {
+      calls.push(cmd)
+      if (cmd === 'get_plugin_contributions') return null
+      throw new Error(`Unexpected command: ${cmd}`)
+    })
+
+    await api.plugins.getContributions('p1')
+    expect(calls).toEqual(['get_plugin_contributions'])
   })
 })

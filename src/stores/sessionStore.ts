@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Session, Message, AgentEvent } from '../types';
+import { isTauriRuntime, sessions as sessionsApi } from '../lib/api';
 
 // Mock 数据 - 用于开发
 const mockSessions: Session[] = [
@@ -63,9 +64,9 @@ interface SessionState {
 
 export const useSessionStore = create<SessionState>((set) => ({
   // 初始状态
-  sessions: mockSessions,
-  activeSessionKey: mockSessions[0]?.key || null,
-  messages: mockMessages,
+  sessions: isTauriRuntime() ? [] : mockSessions,
+  activeSessionKey: isTauriRuntime() ? null : (mockSessions[0]?.key || null),
+  messages: isTauriRuntime() ? {} : mockMessages,
   isLoading: false,
   error: null,
   streamingMessage: null,
@@ -75,34 +76,66 @@ export const useSessionStore = create<SessionState>((set) => ({
     set({ activeSessionKey: key });
   },
 
-  loadSessions: async () => {
+  loadSessions: async (agentId) => {
     set({ isLoading: true, error: null });
     try {
-      // TODO: 调用 Tauri API
-      // const sessions = await invoke('list_sessions', { agentId });
-      // set({ sessions, isLoading: false });
-      
-      // Mock 数据
-      await new Promise(resolve => setTimeout(resolve, 500));
-      set({ isLoading: false });
+      if (!isTauriRuntime()) {
+        // Mock 数据
+        await new Promise(resolve => setTimeout(resolve, 500));
+        set({ isLoading: false });
+        return;
+      }
+
+      const list = await sessionsApi.list(agentId ? { agentId } : undefined);
+      if (list.length === 0) {
+        // Create a default session so the user can chat immediately.
+        const { sessionKey } = await sessionsApi.create(agentId || 'main');
+        set((state) => ({
+          sessions: [
+            {
+              key: sessionKey,
+              agentId: agentId || 'main',
+              displayName: 'New Chat',
+              model: 'default',
+              totalTokens: 0,
+              contextTokens: 0,
+              updatedAt: Date.now(),
+              kind: 'main',
+            },
+            ...state.sessions,
+          ],
+          activeSessionKey: sessionKey,
+          messages: { ...state.messages, [sessionKey]: state.messages[sessionKey] || [] },
+          isLoading: false,
+        }));
+        return;
+      }
+
+      set((state) => ({
+        sessions: list,
+        activeSessionKey: state.activeSessionKey || list[0]?.key || null,
+        isLoading: false,
+      }));
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
   },
 
-  loadMessages: async () => {
+  loadMessages: async (sessionKey) => {
     set({ isLoading: true, error: null });
     try {
-      // TODO: 调用 Tauri API
-      // const messages = await invoke('get_history', { sessionKey });
-      // set((state) => ({
-      //   messages: { ...state.messages, [sessionKey]: messages },
-      //   isLoading: false,
-      // }));
-      
-      // Mock 数据
-      await new Promise(resolve => setTimeout(resolve, 300));
-      set({ isLoading: false });
+      if (!isTauriRuntime()) {
+        // Mock 数据
+        await new Promise(resolve => setTimeout(resolve, 300));
+        set({ isLoading: false });
+        return;
+      }
+
+      const history = await sessionsApi.getHistory(sessionKey, 100, true);
+      set((state) => ({
+        messages: { ...state.messages, [sessionKey]: history },
+        isLoading: false,
+      }));
     } catch (error) {
       set({ error: String(error), isLoading: false });
     }
@@ -124,52 +157,74 @@ export const useSessionStore = create<SessionState>((set) => ({
     }));
 
     try {
-      // TODO: 调用 Tauri API
-      // await invoke('send_message', { sessionKey, message: content });
-      
-      // Mock: 模拟响应
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: [{ type: 'text', text: `Received: ${content}` }],
-        timestamp: Date.now(),
-      };
-      
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [sessionKey]: [...(state.messages[sessionKey] || []), assistantMessage],
-        },
-      }));
+      if (!isTauriRuntime()) {
+        // Mock: 模拟响应
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const assistantMessage: Message = {
+          role: 'assistant',
+          content: [{ type: 'text', text: `Received: ${content}` }],
+          timestamp: Date.now(),
+        };
+
+        set((state) => ({
+          messages: {
+            ...state.messages,
+            [sessionKey]: [...(state.messages[sessionKey] || []), assistantMessage],
+          },
+        }));
+        return;
+      }
+
+      set({ isLoading: true, error: null, streamingMessage: null });
+      await sessionsApi.send(sessionKey, content);
     } catch (error) {
-      set({ error: String(error) });
+      set({ error: String(error), isLoading: false, streamingMessage: null });
     }
   },
 
   createSession: async (agentId) => {
     try {
-      // TODO: 调用 Tauri API
-      // const { sessionKey } = await invoke('create_session', { agentId });
-      
-      // Mock
-      const sessionKey = `agent:${agentId}:session:${Date.now()}`;
+      if (!isTauriRuntime()) {
+        // Mock
+        const sessionKey = `agent:${agentId}:session:${Date.now()}`;
+        const newSession: Session = {
+          key: sessionKey,
+          agentId,
+          displayName: `New Chat`,
+          model: 'claude-sonnet-4-20250514',
+          totalTokens: 0,
+          contextTokens: 0,
+          updatedAt: Date.now(),
+          kind: 'main',
+        };
+
+        set((state) => ({
+          sessions: [newSession, ...state.sessions],
+          activeSessionKey: sessionKey,
+          messages: { ...state.messages, [sessionKey]: [] },
+        }));
+
+        return sessionKey;
+      }
+
+      const { sessionKey } = await sessionsApi.create(agentId);
       const newSession: Session = {
         key: sessionKey,
         agentId,
-        displayName: `New Chat`,
-        model: 'claude-sonnet-4-20250514',
+        displayName: 'New Chat',
+        model: 'default',
         totalTokens: 0,
         contextTokens: 0,
         updatedAt: Date.now(),
         kind: 'main',
       };
-      
+
       set((state) => ({
         sessions: [newSession, ...state.sessions],
         activeSessionKey: sessionKey,
         messages: { ...state.messages, [sessionKey]: [] },
       }));
-      
+
       return sessionKey;
     } catch (error) {
       set({ error: String(error) });
@@ -179,9 +234,11 @@ export const useSessionStore = create<SessionState>((set) => ({
 
   abortSession: async (sessionKey) => {
     try {
-      // TODO: 调用 Tauri API
-      // await invoke('abort_session', { sessionKey });
-      console.log('Abort session:', sessionKey);
+      if (!isTauriRuntime()) {
+        console.log('Abort session:', sessionKey);
+        return;
+      }
+      await sessionsApi.abort(sessionKey);
     } catch (error) {
       set({ error: String(error) });
     }
@@ -191,6 +248,9 @@ export const useSessionStore = create<SessionState>((set) => ({
     const { sessionKey, type, payload } = event;
     
     switch (type) {
+      case 'started':
+        set({ isLoading: true, streamingMessage: null });
+        break;
       case 'text':
         if (payload.delta) {
           set((state) => ({
@@ -207,6 +267,7 @@ export const useSessionStore = create<SessionState>((set) => ({
           };
           return {
             streamingMessage: null,
+            isLoading: false,
             messages: {
               ...state.messages,
               [sessionKey]: [...(state.messages[sessionKey] || []), finalMessage],
@@ -215,7 +276,7 @@ export const useSessionStore = create<SessionState>((set) => ({
         });
         break;
       case 'error':
-        set({ error: payload.error || 'Unknown error', streamingMessage: null });
+        set({ error: payload.error || 'Unknown error', streamingMessage: null, isLoading: false });
         break;
     }
   },
