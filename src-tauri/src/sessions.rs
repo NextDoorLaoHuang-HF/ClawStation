@@ -173,6 +173,33 @@ impl Default for SessionManager {
     }
 }
 
+const GATEWAY_CHAT_SEND_METHOD: &str = "chat.send";
+
+fn build_chat_send_rpc_params(
+    session_key: &str,
+    message: &str,
+    attachments: &[Attachment],
+    idempotency_key: &str,
+) -> serde_json::Value {
+    let mut params = serde_json::json!({
+        "sessionKey": session_key,
+        "message": message,
+        "idempotencyKey": idempotency_key,
+        "deliver": true,
+        "timeoutMs": 5 * 60 * 1000,
+    });
+
+    if !attachments.is_empty() {
+        let attachments_value =
+            serde_json::to_value(attachments).unwrap_or_else(|_| serde_json::json!([]));
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("attachments".to_string(), attachments_value);
+        }
+    }
+
+    params
+}
+
 // ============== Commands ==============
 
 #[tauri::command]
@@ -242,15 +269,14 @@ pub async fn send_message(
     params: SendMessageParams,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let agent_id = {
+    {
         let sessions = state.sessions.read().await;
         // Check if session exists
-        let session = sessions
+        sessions
             .sessions
             .get(&params.session_key)
             .ok_or_else(|| format!("Session not found: {}", params.session_key))?;
-        session.agent_id.clone()
-    };
+    }
 
     // Add user message to history
     let timestamp = chrono::Utc::now().timestamp_millis();
@@ -269,8 +295,9 @@ pub async fn send_message(
         .entry(params.session_key.clone())
         .or_insert_with(Vec::new)
         .push(message);
+    drop(sessions_mgr);
 
-    // Forward to Gateway (OpenClaw operator RPC: op=chat)
+    // Forward to Gateway (OpenClaw operator RPC: chat.send)
     let sender = {
         let gateway = state.gateway.read().await;
         if !gateway.status.connected {
@@ -284,21 +311,17 @@ pub async fn send_message(
 
     let req_id = Uuid::new_v4().to_string();
     let idempotency_key = Uuid::new_v4().to_string();
-
-    let gw_params = serde_json::json!({
-        "op": "chat",
-        "message": params.message,
-        "agentId": agent_id,
-        "sessionKey": params.session_key,
-        "idempotencyKey": idempotency_key,
-        "deliver": true,
-        "timeoutMs": 5 * 60 * 1000,
-    });
+    let gw_params = build_chat_send_rpc_params(
+        &params.session_key,
+        &params.message,
+        &params.attachments,
+        &idempotency_key,
+    );
 
     sender
         .send(WsMessage::Request {
             id: req_id,
-            method: "chat".to_string(),
+            method: GATEWAY_CHAT_SEND_METHOD.to_string(),
             params: gw_params,
         })
         .await
@@ -401,4 +424,48 @@ pub async fn spawn_subagent(
         run_id,
         status: "accepted".to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_chat_send_rpc_params, Attachment, GATEWAY_CHAT_SEND_METHOD};
+
+    #[test]
+    fn build_chat_send_rpc_params_matches_gateway_contract() {
+        let attachments = vec![Attachment {
+            attachment_type: "image".to_string(),
+            path: Some("/tmp/a.png".to_string()),
+            url: None,
+            data: None,
+            mime_type: Some("image/png".to_string()),
+            filename: Some("a.png".to_string()),
+        }];
+
+        let params = build_chat_send_rpc_params("session-1", "hello", &attachments, "idemp-1");
+        assert_eq!(
+            params.get("sessionKey").and_then(|v| v.as_str()),
+            Some("session-1")
+        );
+        assert_eq!(
+            params.get("message").and_then(|v| v.as_str()),
+            Some("hello")
+        );
+        assert_eq!(
+            params.get("idempotencyKey").and_then(|v| v.as_str()),
+            Some("idemp-1")
+        );
+        assert_eq!(params.get("deliver").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            params
+                .get("attachments")
+                .and_then(|v| v.as_array())
+                .map(|v| v.len()),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn uses_gateway_chat_send_method() {
+        assert_eq!(GATEWAY_CHAT_SEND_METHOD, "chat.send");
+    }
 }

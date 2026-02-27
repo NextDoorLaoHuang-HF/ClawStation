@@ -50,8 +50,15 @@ if [[ "$needs_rust" -eq 1 ]]; then
   echo "-----------"
   cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
   cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  # Fast protocol contract smoke tests so RPC field/method regressions are
+  # blocked before commit without running the full test suite.
+  echo ""
+  echo "Rust protocol checks"
+  echo "--------------------"
+  cargo test --manifest-path src-tauri/Cargo.toml gateway::tests::
+  cargo test --manifest-path src-tauri/Cargo.toml sessions::tests::
 fi
 
 echo ""
 echo "✅ pre-commit checks passed"
-

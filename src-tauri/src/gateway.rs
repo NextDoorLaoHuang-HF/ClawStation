@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
-use tokio::sync::{mpsc, Mutex, RwLock};
+use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use uuid::Uuid;
 
@@ -178,6 +178,12 @@ pub fn get_default_gateway_profile() -> Option<GatewayProfile> {
 
 // ============== Types ==============
 
+const GATEWAY_PROTOCOL_VERSION: i32 = 3;
+const GATEWAY_TICK_INTERVAL_MS: i32 = 15000;
+const GATEWAY_HANDSHAKE_TIMEOUT_SECONDS: u64 = 10;
+const GATEWAY_CLIENT_ID: &str = "gateway-client";
+const GATEWAY_CLIENT_MODE: &str = "ui";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayConfig {
     pub url: String,
@@ -272,6 +278,96 @@ pub struct GatewayState {
     pub shutdown_tx: Option<Arc<RwLock<Option<mpsc::Sender<()>>>>>,
 }
 
+fn build_connect_params(token: &str) -> serde_json::Value {
+    let mut params = serde_json::json!({
+        "minProtocol": GATEWAY_PROTOCOL_VERSION,
+        "maxProtocol": GATEWAY_PROTOCOL_VERSION,
+        "client": {
+            "id": GATEWAY_CLIENT_ID,
+            "displayName": "clawstation",
+            "version": env!("CARGO_PKG_VERSION"),
+            "platform": std::env::consts::OS,
+            "mode": GATEWAY_CLIENT_MODE,
+            "instanceId": Uuid::new_v4().to_string()
+        },
+        "role": "operator",
+        "scopes": ["operator.read", "operator.write"],
+        "caps": [],
+        "commands": [],
+        "permissions": {},
+        "locale": "en-US",
+        "userAgent": format!("clawstation/{}", env!("CARGO_PKG_VERSION"))
+    });
+
+    if !token.trim().is_empty() {
+        if let Some(obj) = params.as_object_mut() {
+            obj.insert("auth".to_string(), serde_json::json!({ "token": token }));
+        }
+    }
+
+    params
+}
+
+fn parse_connect_response(
+    ws_msg: &serde_json::Value,
+    connect_id: &str,
+) -> Option<Result<ConnectedPayload, String>> {
+    if ws_msg.get("type").and_then(|v| v.as_str()) != Some("res") {
+        return None;
+    }
+
+    if ws_msg.get("id").and_then(|v| v.as_str()) != Some(connect_id) {
+        return None;
+    }
+
+    let ok = ws_msg.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    if !ok {
+        let message = ws_msg
+            .pointer("/error/message")
+            .and_then(|v| v.as_str())
+            .or_else(|| ws_msg.get("error").and_then(|v| v.as_str()))
+            .unwrap_or("Gateway rejected connect request");
+        return Some(Err(message.to_string()));
+    }
+
+    let protocol = ws_msg
+        .pointer("/payload/protocol")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(i64::from(GATEWAY_PROTOCOL_VERSION)) as i32;
+    let tick_interval_ms = ws_msg
+        .pointer("/payload/policy/tickIntervalMs")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(i64::from(GATEWAY_TICK_INTERVAL_MS)) as i32;
+
+    Some(Ok(ConnectedPayload {
+        protocol,
+        policy: Policy { tick_interval_ms },
+    }))
+}
+
+async fn clear_gateway_runtime_state(
+    state: &Arc<RwLock<GatewayState>>,
+) -> Option<Arc<RwLock<Option<mpsc::Sender<()>>>>> {
+    let mut gateway = state.write().await;
+    gateway.status.connected = false;
+    gateway.status.protocol = None;
+    gateway.status.last_ping = None;
+    gateway.config = None;
+    gateway.status.url = None;
+    gateway.status.agent_id = None;
+    gateway.sender = None;
+    gateway.shutdown_tx.take()
+}
+
+async fn send_shutdown_signal(shutdown_tx: Option<Arc<RwLock<Option<mpsc::Sender<()>>>>>) {
+    if let Some(tx) = shutdown_tx {
+        let mut guard = tx.write().await;
+        if let Some(tx) = guard.take() {
+            let _ = tx.send(()).await;
+        }
+    }
+}
+
 // ============== Commands ==============
 
 #[tauri::command]
@@ -305,12 +401,27 @@ pub async fn connect(
     // Create channels for communication
     let (tx, rx) = mpsc::channel::<WsMessage>(100);
     let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
+    let (connect_result_tx, connect_result_rx) =
+        oneshot::channel::<Result<ConnectedPayload, String>>();
+
+    // Send connect request before starting the reader heartbeat loop.
+    let connect_id = Uuid::new_v4().to_string();
+    let connect_req = WsMessage::Request {
+        id: connect_id.clone(),
+        method: "connect".to_string(),
+        params: build_connect_params(&token),
+    };
+
+    tx.send(connect_req)
+        .await
+        .map_err(|e| format!("Failed to send connect request: {}", e))?;
 
     // Update state
     {
         let mut gateway = state.gateway.write().await;
         gateway.config = Some(config.clone());
-        gateway.status.connected = true;
+        gateway.status.connected = false;
+        gateway.status.protocol = None;
         gateway.status.url = Some(url.clone());
         gateway.status.agent_id = Some(agent_id.clone());
         gateway.sender = Some(tx.clone());
@@ -360,11 +471,16 @@ pub async fn connect(
     // Spawn task to handle incoming messages
     let app_clone = app.clone();
     let state_clone = state.gateway.clone();
+    let connect_id_for_reader = connect_id.clone();
     tokio::spawn(async move {
         let write = write; // Arc<Mutex<>>
         let mut read = read;
+        let mut connect_result_tx = Some(connect_result_tx);
+        let mut handshake_ok = false;
         // Note: shutdown_rx was moved to the first task, reader will check status instead
         let mut heartbeat_interval = tokio::time::interval(std::time::Duration::from_secs(15));
+        // tokio interval's first tick is immediate; consume it to avoid sending ping before handshake.
+        heartbeat_interval.tick().await;
 
         loop {
             tokio::select! {
@@ -372,6 +488,22 @@ pub async fn connect(
                     match msg {
                         Some(Ok(Message::Text(text))) => {
                             if let Ok(ws_msg) = serde_json::from_str::<serde_json::Value>(&text) {
+                                if let Some(result) = parse_connect_response(&ws_msg, &connect_id_for_reader) {
+                                    match result {
+                                        Ok(payload) => {
+                                            handshake_ok = true;
+                                            if let Some(tx) = connect_result_tx.take() {
+                                                let _ = tx.send(Ok(payload));
+                                            }
+                                        }
+                                        Err(error) => {
+                                            if let Some(tx) = connect_result_tx.take() {
+                                                let _ = tx.send(Err(error));
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
                                 handle_ws_message(&ws_msg, &app_clone, &state_clone).await;
                             }
                         }
@@ -395,6 +527,9 @@ pub async fn connect(
                     }
                 }
                 _ = heartbeat_interval.tick() => {
+                    if !handshake_ok {
+                        continue;
+                    }
                     // Send heartbeat
                     let ping = serde_json::json!({
                         "type": "req",
@@ -411,9 +546,15 @@ pub async fn connect(
             }
         }
 
+        if let Some(tx) = connect_result_tx.take() {
+            let _ = tx.send(Err(
+                "Connection closed before handshake completed".to_string()
+            ));
+        }
+
         // Cleanup on disconnect
-        let mut gateway = state_clone.write().await;
-        gateway.status.connected = false;
+        let shutdown_tx = clear_gateway_runtime_state(&state_clone).await;
+        send_shutdown_signal(shutdown_tx).await;
         let _ = app_clone.emit(
             "gateway",
             GatewayEvent::Disconnected {
@@ -424,49 +565,49 @@ pub async fn connect(
         );
     });
 
-    // Send connect request
-    let connect_id = Uuid::new_v4().to_string();
-    let connect_params = serde_json::json!({
-        "minProtocol": 3,
-        "maxProtocol": 3,
-        "client": {
-            "id": "clawstation",
-            "version": env!("CARGO_PKG_VERSION"),
-            "platform": std::env::consts::OS,
-            "mode": "operator"
-        },
-        "role": "operator",
-        "scopes": ["operator.read", "operator.write"],
-        "caps": [],
-        "commands": [],
-        "permissions": {},
-        "auth": { "token": token },
-        "locale": "en-US",
-        "userAgent": format!("clawstation/{}", env!("CARGO_PKG_VERSION"))
-    });
-
-    let connect_req = WsMessage::Request {
-        id: connect_id,
-        method: "connect".to_string(),
-        params: connect_params,
+    let connect_payload = match tokio::time::timeout(
+        std::time::Duration::from_secs(GATEWAY_HANDSHAKE_TIMEOUT_SECONDS),
+        connect_result_rx,
+    )
+    .await
+    {
+        Ok(Ok(Ok(payload))) => payload,
+        Ok(Ok(Err(message))) => {
+            let _ = app.emit(
+                "gateway",
+                GatewayEvent::Error {
+                    payload: ErrorPayload {
+                        message: message.clone(),
+                    },
+                },
+            );
+            return Err(format!("Gateway handshake failed: {}", message));
+        }
+        Ok(Err(_)) => {
+            return Err("Gateway handshake channel unexpectedly closed".to_string());
+        }
+        Err(_) => {
+            let shutdown_tx = clear_gateway_runtime_state(&state.gateway).await;
+            send_shutdown_signal(shutdown_tx).await;
+            return Err("Gateway handshake timed out".to_string());
+        }
     };
 
-    tx.send(connect_req).await.map_err(|e| e.to_string())?;
+    {
+        let mut gateway = state.gateway.write().await;
+        gateway.status.connected = true;
+        gateway.status.protocol = Some(connect_payload.protocol);
+    }
 
     // Emit connected event
     let _ = app.emit(
         "gateway",
         GatewayEvent::Connected {
-            payload: ConnectedPayload {
-                protocol: 3,
-                policy: Policy {
-                    tick_interval_ms: 15000,
-                },
-            },
+            payload: connect_payload,
         },
     );
 
-    tracing::info!("Gateway connection initiated");
+    tracing::info!("Gateway connection established");
     Ok(())
 }
 
@@ -650,22 +791,8 @@ async fn handle_ws_message(
 pub async fn disconnect(state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     tracing::info!("Disconnecting from Gateway");
 
-    let shutdown_tx = {
-        let mut gateway = state.gateway.write().await;
-        gateway.status.connected = false;
-        gateway.config = None;
-        gateway.status.url = None;
-        gateway.status.agent_id = None;
-        gateway.sender = None;
-        gateway.shutdown_tx.take()
-    };
-
-    if let Some(tx) = shutdown_tx {
-        let mut guard = tx.write().await;
-        if let Some(tx) = guard.take() {
-            let _ = tx.send(()).await;
-        }
-    }
+    let shutdown_tx = clear_gateway_runtime_state(&state.gateway).await;
+    send_shutdown_signal(shutdown_tx).await;
 
     let _ = app.emit(
         "gateway",
@@ -683,4 +810,61 @@ pub async fn disconnect(state: State<'_, AppState>, app: AppHandle) -> Result<()
 pub async fn get_status(state: State<'_, AppState>) -> Result<GatewayStatus, String> {
     let gateway = state.gateway.read().await;
     Ok(gateway.status.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_connect_params, parse_connect_response};
+    use serde_json::json;
+
+    #[test]
+    fn build_connect_params_uses_gateway_client_enum_values() {
+        let params = build_connect_params("token-123");
+        assert_eq!(
+            params.pointer("/client/id").and_then(|v| v.as_str()),
+            Some("gateway-client")
+        );
+        assert_eq!(
+            params.pointer("/client/mode").and_then(|v| v.as_str()),
+            Some("ui")
+        );
+        assert_eq!(
+            params.pointer("/auth/token").and_then(|v| v.as_str()),
+            Some("token-123")
+        );
+    }
+
+    #[test]
+    fn parse_connect_response_reads_hello_payload() {
+        let msg = json!({
+            "type": "res",
+            "id": "abc",
+            "ok": true,
+            "payload": {
+                "protocol": 3,
+                "policy": { "tickIntervalMs": 12000 }
+            }
+        });
+
+        let parsed = parse_connect_response(&msg, "abc")
+            .expect("response should match connect id")
+            .expect("response should be ok");
+        assert_eq!(parsed.protocol, 3);
+        assert_eq!(parsed.policy.tick_interval_ms, 12000);
+    }
+
+    #[test]
+    fn parse_connect_response_extracts_error_message() {
+        let msg = json!({
+            "type": "res",
+            "id": "abc",
+            "ok": false,
+            "error": { "message": "invalid connect params" }
+        });
+
+        let err = parse_connect_response(&msg, "abc")
+            .expect("response should match connect id")
+            .expect_err("response should be error");
+        assert!(err.contains("invalid connect params"));
+    }
 }
