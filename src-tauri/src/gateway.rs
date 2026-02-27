@@ -1,13 +1,20 @@
 // Gateway Module - WebSocket client for OpenClaw Gateway
 
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
+use ed25519_dalek::{Signer, SigningKey};
 use futures_util::{SinkExt, StreamExt};
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, State};
+use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use uuid::Uuid;
 
 use crate::AppState;
@@ -181,8 +188,13 @@ pub fn get_default_gateway_profile() -> Option<GatewayProfile> {
 const GATEWAY_PROTOCOL_VERSION: i32 = 3;
 const GATEWAY_TICK_INTERVAL_MS: i32 = 15000;
 const GATEWAY_HANDSHAKE_TIMEOUT_SECONDS: u64 = 10;
+const GATEWAY_CHALLENGE_TIMEOUT_MILLIS: u64 = 3000;
 const GATEWAY_CLIENT_ID: &str = "gateway-client";
 const GATEWAY_CLIENT_MODE: &str = "ui";
+const GATEWAY_CLIENT_DEVICE_FAMILY: &str = "desktop";
+const DEVICE_IDENTITY_VERSION: u8 = 1;
+const GATEWAY_ROLE: &str = "operator";
+const GATEWAY_SCOPES: &[&str] = &["operator.read", "operator.write"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayConfig {
@@ -278,7 +290,248 @@ pub struct GatewayState {
     pub shutdown_tx: Option<Arc<RwLock<Option<mpsc::Sender<()>>>>>,
 }
 
-fn build_connect_params(token: &str) -> serde_json::Value {
+type GatewayWsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type GatewayWsRead = futures_util::stream::SplitStream<GatewayWsStream>;
+type GatewayWsWrite = futures_util::stream::SplitSink<GatewayWsStream, Message>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredDeviceIdentity {
+    version: u8,
+    device_id: String,
+    public_key: String,
+    private_key: String,
+    created_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct DeviceIdentity {
+    device_id: String,
+    public_key: String,
+    signing_key: SigningKey,
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn encode_base64_url(bytes: &[u8]) -> String {
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn decode_base64_url_to_array<const N: usize>(value: &str) -> Result<[u8; N], String> {
+    let decoded = URL_SAFE_NO_PAD
+        .decode(value)
+        .map_err(|e| format!("Invalid base64url identity data: {}", e))?;
+    decoded
+        .try_into()
+        .map_err(|_| format!("Invalid identity byte length, expected {}", N))
+}
+
+fn derive_device_id(public_key_raw: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(public_key_raw);
+    format!("{:x}", hasher.finalize())
+}
+
+fn generate_device_identity() -> DeviceIdentity {
+    let mut rng = OsRng;
+    let signing_key = SigningKey::generate(&mut rng);
+    let public_key = encode_base64_url(signing_key.verifying_key().to_bytes().as_ref());
+    let device_id = derive_device_id(signing_key.verifying_key().to_bytes().as_ref());
+    DeviceIdentity {
+        device_id,
+        public_key,
+        signing_key,
+    }
+}
+
+fn get_device_identity_path() -> PathBuf {
+    get_config_dir().join("device_identity.json")
+}
+
+fn load_or_create_device_identity() -> Result<DeviceIdentity, String> {
+    let path = get_device_identity_path();
+    if let Ok(raw) = fs::read_to_string(&path) {
+        if let Ok(stored) = serde_json::from_str::<StoredDeviceIdentity>(&raw) {
+            if stored.version == DEVICE_IDENTITY_VERSION {
+                if let (Ok(public_key_raw), Ok(private_key_raw)) = (
+                    decode_base64_url_to_array::<32>(&stored.public_key),
+                    decode_base64_url_to_array::<32>(&stored.private_key),
+                ) {
+                    let signing_key = SigningKey::from_bytes(&private_key_raw);
+                    let derived_public_key_raw = signing_key.verifying_key().to_bytes();
+                    let derived_device_id = derive_device_id(derived_public_key_raw.as_ref());
+                    if derived_public_key_raw == public_key_raw
+                        && derived_device_id == stored.device_id
+                    {
+                        return Ok(DeviceIdentity {
+                            device_id: stored.device_id,
+                            public_key: stored.public_key,
+                            signing_key,
+                        });
+                    }
+                }
+                tracing::warn!("Stored device identity mismatch, regenerating identity");
+            }
+        }
+    }
+
+    let identity = generate_device_identity();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create identity dir: {}", e))?;
+    }
+
+    let stored = StoredDeviceIdentity {
+        version: DEVICE_IDENTITY_VERSION,
+        device_id: identity.device_id.clone(),
+        public_key: identity.public_key.clone(),
+        private_key: encode_base64_url(identity.signing_key.to_bytes().as_ref()),
+        created_at_ms: now_ms(),
+    };
+    let serialized = serde_json::to_string_pretty(&stored)
+        .map_err(|e| format!("Failed to serialize identity: {}", e))?;
+    fs::write(&path, serialized).map_err(|e| format!("Failed to persist identity: {}", e))?;
+    Ok(identity)
+}
+
+fn normalize_device_metadata_for_auth(value: &str) -> String {
+    value
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_uppercase() {
+                c.to_ascii_lowercase()
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+}
+
+struct DeviceAuthPayloadV3Params<'a> {
+    device_id: &'a str,
+    client_id: &'a str,
+    client_mode: &'a str,
+    role: &'a str,
+    scopes: &'a [&'a str],
+    signed_at_ms: u64,
+    token: &'a str,
+    nonce: &'a str,
+    platform: &'a str,
+    device_family: &'a str,
+}
+
+fn build_device_auth_payload_v3(params: DeviceAuthPayloadV3Params<'_>) -> String {
+    let scopes_csv = params.scopes.join(",");
+    let normalized_platform = normalize_device_metadata_for_auth(params.platform);
+    let normalized_device_family = normalize_device_metadata_for_auth(params.device_family);
+    [
+        "v3".to_string(),
+        params.device_id.to_string(),
+        params.client_id.to_string(),
+        params.client_mode.to_string(),
+        params.role.to_string(),
+        scopes_csv,
+        params.signed_at_ms.to_string(),
+        params.token.to_string(),
+        params.nonce.to_string(),
+        normalized_platform,
+        normalized_device_family,
+    ]
+    .join("|")
+}
+
+fn build_signed_device_identity(
+    identity: &DeviceIdentity,
+    challenge_nonce: &str,
+    token: &str,
+) -> serde_json::Value {
+    let signed_at = now_ms();
+    let payload = build_device_auth_payload_v3(DeviceAuthPayloadV3Params {
+        device_id: &identity.device_id,
+        client_id: GATEWAY_CLIENT_ID,
+        client_mode: GATEWAY_CLIENT_MODE,
+        role: GATEWAY_ROLE,
+        scopes: GATEWAY_SCOPES,
+        signed_at_ms: signed_at,
+        token,
+        nonce: challenge_nonce,
+        platform: std::env::consts::OS,
+        device_family: GATEWAY_CLIENT_DEVICE_FAMILY,
+    });
+    let signature = identity.signing_key.sign(payload.as_bytes());
+    serde_json::json!({
+        "id": identity.device_id,
+        "publicKey": identity.public_key,
+        "signature": encode_base64_url(signature.to_bytes().as_ref()),
+        "signedAt": signed_at,
+        "nonce": challenge_nonce,
+    })
+}
+
+fn parse_connect_challenge_nonce(ws_msg: &serde_json::Value) -> Option<String> {
+    if ws_msg.get("type").and_then(|v| v.as_str()) != Some("event") {
+        return None;
+    }
+    if ws_msg.get("event").and_then(|v| v.as_str()) != Some("connect.challenge") {
+        return None;
+    }
+    ws_msg
+        .pointer("/payload/nonce")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+async fn wait_for_connect_challenge_nonce(
+    read: &mut GatewayWsRead,
+    write: &mut GatewayWsWrite,
+) -> Result<Option<String>, String> {
+    let wait_for_nonce = async {
+        loop {
+            match read.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    if let Ok(ws_msg) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if let Some(nonce) = parse_connect_challenge_nonce(&ws_msg) {
+                            return Ok(Some(nonce));
+                        }
+                    }
+                }
+                Some(Ok(Message::Ping(data))) => {
+                    write
+                        .send(Message::Pong(data))
+                        .await
+                        .map_err(|e| format!("Failed to respond to gateway ping: {}", e))?;
+                }
+                Some(Ok(Message::Close(_))) | None => {
+                    return Err("Gateway closed connection before handshake".to_string());
+                }
+                Some(Err(e)) => {
+                    return Err(format!("Failed while waiting gateway challenge: {}", e));
+                }
+                _ => {}
+            }
+        }
+    };
+
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(GATEWAY_CHALLENGE_TIMEOUT_MILLIS),
+        wait_for_nonce,
+    )
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => Ok(None),
+    }
+}
+
+fn build_connect_params(
+    token: &str,
+    challenge_nonce: Option<&str>,
+) -> Result<serde_json::Value, String> {
     let mut params = serde_json::json!({
         "minProtocol": GATEWAY_PROTOCOL_VERSION,
         "maxProtocol": GATEWAY_PROTOCOL_VERSION,
@@ -287,11 +540,12 @@ fn build_connect_params(token: &str) -> serde_json::Value {
             "displayName": "clawstation",
             "version": env!("CARGO_PKG_VERSION"),
             "platform": std::env::consts::OS,
+            "deviceFamily": GATEWAY_CLIENT_DEVICE_FAMILY,
             "mode": GATEWAY_CLIENT_MODE,
             "instanceId": Uuid::new_v4().to_string()
         },
-        "role": "operator",
-        "scopes": ["operator.read", "operator.write"],
+        "role": GATEWAY_ROLE,
+        "scopes": GATEWAY_SCOPES,
         "caps": [],
         "commands": [],
         "permissions": {},
@@ -305,7 +559,20 @@ fn build_connect_params(token: &str) -> serde_json::Value {
         }
     }
 
-    params
+    if let Some(nonce) = challenge_nonce {
+        let trimmed_nonce = nonce.trim();
+        if !trimmed_nonce.is_empty() {
+            let identity = load_or_create_device_identity()?;
+            if let Some(obj) = params.as_object_mut() {
+                obj.insert(
+                    "device".to_string(),
+                    build_signed_device_identity(&identity, trimmed_nonce, token),
+                );
+            }
+        }
+    }
+
+    Ok(params)
 }
 
 fn parse_connect_response(
@@ -396,25 +663,35 @@ pub async fn connect(
         .await
         .map_err(|e| format!("Failed to connect to gateway: {}", e))?;
 
-    let (write, read) = ws_stream.split();
+    let (mut write, mut read) = ws_stream.split();
+
+    // OpenClaw sends connect.challenge with a nonce immediately after WS open.
+    // Use it to attach device identity/signature when required by gateway policy.
+    let challenge_nonce = wait_for_connect_challenge_nonce(&mut read, &mut write).await?;
+    if challenge_nonce.is_none() {
+        tracing::warn!(
+            "Gateway did not send connect.challenge before timeout; trying legacy connect"
+        );
+    }
+
+    let connect_id = Uuid::new_v4().to_string();
+    let connect_params = build_connect_params(&token, challenge_nonce.as_deref())?;
+    let connect_req = serde_json::json!({
+        "type": "req",
+        "id": connect_id.clone(),
+        "method": "connect",
+        "params": connect_params
+    });
+    write
+        .send(Message::Text(connect_req.to_string().into()))
+        .await
+        .map_err(|e| format!("Failed to send connect request: {}", e))?;
 
     // Create channels for communication
     let (tx, rx) = mpsc::channel::<WsMessage>(100);
     let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>(1);
     let (connect_result_tx, connect_result_rx) =
         oneshot::channel::<Result<ConnectedPayload, String>>();
-
-    // Send connect request before starting the reader heartbeat loop.
-    let connect_id = Uuid::new_v4().to_string();
-    let connect_req = WsMessage::Request {
-        id: connect_id.clone(),
-        method: "connect".to_string(),
-        params: build_connect_params(&token),
-    };
-
-    tx.send(connect_req)
-        .await
-        .map_err(|e| format!("Failed to send connect request: {}", e))?;
 
     // Update state
     {
@@ -814,12 +1091,15 @@ pub async fn get_status(state: State<'_, AppState>) -> Result<GatewayStatus, Str
 
 #[cfg(test)]
 mod tests {
-    use super::{build_connect_params, parse_connect_response};
+    use super::{
+        build_connect_params, build_signed_device_identity, generate_device_identity,
+        parse_connect_challenge_nonce, parse_connect_response,
+    };
     use serde_json::json;
 
     #[test]
     fn build_connect_params_uses_gateway_client_enum_values() {
-        let params = build_connect_params("token-123");
+        let params = build_connect_params("token-123", None).expect("connect params should build");
         assert_eq!(
             params.pointer("/client/id").and_then(|v| v.as_str()),
             Some("gateway-client")
@@ -829,9 +1109,69 @@ mod tests {
             Some("ui")
         );
         assert_eq!(
+            params
+                .pointer("/client/deviceFamily")
+                .and_then(|v| v.as_str()),
+            Some("desktop")
+        );
+        assert_eq!(
             params.pointer("/auth/token").and_then(|v| v.as_str()),
             Some("token-123")
         );
+        assert!(params.get("device").is_none());
+    }
+
+    #[test]
+    fn parse_connect_challenge_nonce_reads_nonce() {
+        let msg = json!({
+            "type": "event",
+            "event": "connect.challenge",
+            "payload": {
+                "nonce": "nonce-abc",
+                "ts": 123
+            }
+        });
+        assert_eq!(
+            parse_connect_challenge_nonce(&msg).as_deref(),
+            Some("nonce-abc")
+        );
+    }
+
+    #[test]
+    fn build_signed_device_identity_uses_nonce_and_signature() {
+        let identity = generate_device_identity();
+        let device = build_signed_device_identity(&identity, "nonce-123", "token-123");
+
+        assert_eq!(
+            device.get("id").and_then(|v| v.as_str()),
+            Some(identity.device_id.as_str())
+        );
+        assert_eq!(
+            device.get("nonce").and_then(|v| v.as_str()),
+            Some("nonce-123")
+        );
+        assert!(device
+            .get("signature")
+            .and_then(|v| v.as_str())
+            .is_some_and(|v| !v.is_empty()));
+        assert!(device
+            .get("publicKey")
+            .and_then(|v| v.as_str())
+            .is_some_and(|v| !v.is_empty()));
+    }
+
+    #[test]
+    fn build_connect_params_includes_device_identity_when_nonce_is_available() {
+        let params =
+            build_connect_params("", Some("nonce-xyz")).expect("connect params should build");
+        assert_eq!(
+            params.pointer("/device/nonce").and_then(|v| v.as_str()),
+            Some("nonce-xyz")
+        );
+        assert!(params
+            .pointer("/device/signature")
+            .and_then(|v| v.as_str())
+            .is_some_and(|v| !v.is_empty()));
     }
 
     #[test]

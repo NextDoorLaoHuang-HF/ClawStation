@@ -7,6 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
+./scripts/toolchain-check.sh
 
 echo "🔍 ClawStation pre-push check"
 echo "=============================="
@@ -53,6 +54,7 @@ run_check "Build" npm run build
 echo ""
 echo "⚙️  Backend (Rust)"
 echo "-----------------"
+run_check "Gateway protocol contract tests" npm run check:protocol
 pushd src-tauri >/dev/null
 run_check "rustfmt" cargo fmt -- --check
 run_check "clippy" cargo clippy --all-targets -- -D warnings

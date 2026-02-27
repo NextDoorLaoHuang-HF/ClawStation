@@ -7,6 +7,11 @@
 
 set -euo pipefail
 
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Skipping git hook install: not inside a git working tree."
+  exit 0
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
@@ -16,7 +21,9 @@ if [[ ! -d .githooks ]]; then
 fi
 
 chmod +x .githooks/pre-commit .githooks/pre-push
-git config core.hooksPath .githooks
+current_hooks_path="$(git config --get core.hooksPath || true)"
+if [[ "$current_hooks_path" != ".githooks" ]]; then
+  git config core.hooksPath .githooks
+fi
 
 echo "✅ Installed git hooks (core.hooksPath=.githooks)"
-

@@ -91,6 +91,10 @@ cd clawstation
 
 # 2. 安装依赖
 npm ci
+# （推荐）确认 git hooks 已启用
+npm run hooks:install
+# 检查本机工具链是否满足最低要求
+npm run check:toolchain
 
 # 3. 启动开发（桌面应用）
 npm run tauri:dev

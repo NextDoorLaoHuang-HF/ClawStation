@@ -56,6 +56,11 @@ jobs:
       - name: Run clippy
         run: cd src-tauri && cargo clippy --all-targets -- -D warnings
 
+      - name: Run protocol contract tests
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml gateway::tests::
+          cargo test --manifest-path src-tauri/Cargo.toml sessions::tests::
+
       - name: Check dependencies
         run: cd src-tauri && cargo audit || true
 

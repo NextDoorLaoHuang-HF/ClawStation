@@ -85,6 +85,11 @@ cd clawstation
 # 安装依赖（仓库包含 package-lock.json，CI 默认使用 npm）
 npm ci
 
+# npm ci 会自动执行 prepare 安装 hooks；新开发机建议手动再确认一次
+npm run hooks:install
+git config --get core.hooksPath   # 期望输出: .githooks
+npm run check:toolchain           # 确认 Rust 版本满足仓库最低要求
+
 # 启动开发（桌面应用）
 npm run tauri:dev
 ```

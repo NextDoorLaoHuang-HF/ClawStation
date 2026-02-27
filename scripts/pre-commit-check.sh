@@ -45,6 +45,8 @@ if [[ "$needs_frontend" -eq 1 ]]; then
 fi
 
 if [[ "$needs_rust" -eq 1 ]]; then
+  ./scripts/toolchain-check.sh
+
   echo ""
   echo "Rust checks"
   echo "-----------"
@@ -56,8 +58,7 @@ if [[ "$needs_rust" -eq 1 ]]; then
   echo ""
   echo "Rust protocol checks"
   echo "--------------------"
-  cargo test --manifest-path src-tauri/Cargo.toml gateway::tests::
-  cargo test --manifest-path src-tauri/Cargo.toml sessions::tests::
+  npm run check:protocol
 fi
 
 echo ""
