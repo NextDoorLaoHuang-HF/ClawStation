@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Fast, deterministic checks to run before `git commit`.
-# Keep it quick: full test/build runs are handled by `npm run check` (pre-push/CI).
+# Deterministic checks to run before `git commit`.
+# Note: frontend changes also run coverage to enforce thresholds early.
 
 set -euo pipefail
 
@@ -42,6 +42,9 @@ if [[ "$needs_frontend" -eq 1 ]]; then
   npm run lint
   npm run layer-lint
   npm run doc-check
+  npm run release-gate
+  npm run tauri-command-lint
+  npm run test:coverage
 fi
 
 if [[ "$needs_rust" -eq 1 ]]; then

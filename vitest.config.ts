@@ -11,12 +11,12 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
       exclude: ['node_modules/', 'src/test/'],
-      // Keep thresholds modest but enforced; raise over time as coverage improves.
+      // Enforced baseline for project-wide mock coverage.
       thresholds: {
-        lines: 55,
-        functions: 30,
-        branches: 60,
-        statements: 55,
+        lines: 85,
+        functions: 80,
+        branches: 78,
+        statements: 85,
       },
     }
   }

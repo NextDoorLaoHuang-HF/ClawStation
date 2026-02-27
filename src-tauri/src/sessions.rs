@@ -200,6 +200,40 @@ fn build_chat_send_rpc_params(
     params
 }
 
+async fn forward_chat_send_to_gateway(
+    state: &AppState,
+    params: &SendMessageParams,
+) -> Result<(), String> {
+    let sender = {
+        let gateway = state.gateway.read().await;
+        if !gateway.status.connected {
+            return Err("Gateway not connected".to_string());
+        }
+        gateway
+            .sender
+            .clone()
+            .ok_or_else(|| "Gateway sender not available".to_string())?
+    };
+
+    let req_id = Uuid::new_v4().to_string();
+    let idempotency_key = Uuid::new_v4().to_string();
+    let gw_params = build_chat_send_rpc_params(
+        &params.session_key,
+        &params.message,
+        &params.attachments,
+        &idempotency_key,
+    );
+
+    sender
+        .send(WsMessage::Request {
+            id: req_id,
+            method: GATEWAY_CHAT_SEND_METHOD.to_string(),
+            params: gw_params,
+        })
+        .await
+        .map_err(|e| format!("Failed to send to gateway: {}", e))
+}
+
 // ============== Commands ==============
 
 #[tauri::command]
@@ -298,34 +332,7 @@ pub async fn send_message(
     drop(sessions_mgr);
 
     // Forward to Gateway (OpenClaw operator RPC: chat.send)
-    let sender = {
-        let gateway = state.gateway.read().await;
-        if !gateway.status.connected {
-            return Err("Gateway not connected".to_string());
-        }
-        gateway
-            .sender
-            .clone()
-            .ok_or_else(|| "Gateway sender not available".to_string())?
-    };
-
-    let req_id = Uuid::new_v4().to_string();
-    let idempotency_key = Uuid::new_v4().to_string();
-    let gw_params = build_chat_send_rpc_params(
-        &params.session_key,
-        &params.message,
-        &params.attachments,
-        &idempotency_key,
-    );
-
-    sender
-        .send(WsMessage::Request {
-            id: req_id,
-            method: GATEWAY_CHAT_SEND_METHOD.to_string(),
-            params: gw_params,
-        })
-        .await
-        .map_err(|e| format!("Failed to send to gateway: {}", e))?;
+    forward_chat_send_to_gateway(state.inner(), &params).await?;
 
     Ok(())
 }
@@ -428,7 +435,12 @@ pub async fn spawn_subagent(
 
 #[cfg(test)]
 mod tests {
-    use super::{build_chat_send_rpc_params, Attachment, GATEWAY_CHAT_SEND_METHOD};
+    use super::{
+        build_chat_send_rpc_params, forward_chat_send_to_gateway, Attachment, SendMessageParams,
+        GATEWAY_CHAT_SEND_METHOD,
+    };
+    use crate::{gateway::WsMessage, AppState};
+    use tokio::sync::mpsc;
 
     #[test]
     fn build_chat_send_rpc_params_matches_gateway_contract() {
@@ -467,5 +479,115 @@ mod tests {
     #[test]
     fn uses_gateway_chat_send_method() {
         assert_eq!(GATEWAY_CHAT_SEND_METHOD, "chat.send");
+    }
+
+    #[tokio::test]
+    async fn forward_chat_send_to_gateway_sends_chat_send_request() {
+        let state = AppState::default();
+        let (tx, mut rx) = mpsc::channel::<WsMessage>(1);
+        {
+            let mut gateway = state.gateway.write().await;
+            gateway.status.connected = true;
+            gateway.sender = Some(tx);
+        }
+
+        let params = SendMessageParams {
+            session_key: "session-1".to_string(),
+            message: "hello".to_string(),
+            attachments: vec![Attachment {
+                attachment_type: "image".to_string(),
+                path: Some("/tmp/a.png".to_string()),
+                url: None,
+                data: None,
+                mime_type: Some("image/png".to_string()),
+                filename: Some("a.png".to_string()),
+            }],
+        };
+
+        forward_chat_send_to_gateway(&state, &params)
+            .await
+            .expect("should send request to gateway");
+
+        let msg = rx.recv().await.expect("gateway request should be emitted");
+        match msg {
+            WsMessage::Request { method, params, .. } => {
+                assert_eq!(method, GATEWAY_CHAT_SEND_METHOD);
+                assert_eq!(
+                    params.get("sessionKey").and_then(|v| v.as_str()),
+                    Some("session-1")
+                );
+                assert_eq!(
+                    params.get("message").and_then(|v| v.as_str()),
+                    Some("hello")
+                );
+                assert_eq!(params.get("deliver").and_then(|v| v.as_bool()), Some(true));
+                assert!(params
+                    .get("idempotencyKey")
+                    .and_then(|v| v.as_str())
+                    .is_some_and(|v| !v.is_empty()));
+                assert_eq!(
+                    params
+                        .get("attachments")
+                        .and_then(|v| v.as_array())
+                        .map(|v| v.len()),
+                    Some(1)
+                );
+            }
+            _ => panic!("expected WsMessage::Request"),
+        }
+    }
+
+    #[tokio::test]
+    async fn forward_chat_send_to_gateway_requires_connected_gateway() {
+        let state = AppState::default();
+        let params = SendMessageParams {
+            session_key: "session-1".to_string(),
+            message: "hello".to_string(),
+            attachments: Vec::new(),
+        };
+        let err = forward_chat_send_to_gateway(&state, &params)
+            .await
+            .expect_err("should fail when disconnected");
+        assert!(err.contains("Gateway not connected"));
+    }
+
+    #[tokio::test]
+    async fn forward_chat_send_to_gateway_requires_sender() {
+        let state = AppState::default();
+        {
+            let mut gateway = state.gateway.write().await;
+            gateway.status.connected = true;
+            gateway.sender = None;
+        }
+        let params = SendMessageParams {
+            session_key: "session-1".to_string(),
+            message: "hello".to_string(),
+            attachments: Vec::new(),
+        };
+        let err = forward_chat_send_to_gateway(&state, &params)
+            .await
+            .expect_err("should fail when sender is missing");
+        assert!(err.contains("Gateway sender not available"));
+    }
+
+    #[tokio::test]
+    async fn forward_chat_send_to_gateway_handles_closed_channel() {
+        let state = AppState::default();
+        let (tx, rx) = mpsc::channel::<WsMessage>(1);
+        drop(rx);
+        {
+            let mut gateway = state.gateway.write().await;
+            gateway.status.connected = true;
+            gateway.sender = Some(tx);
+        }
+        let params = SendMessageParams {
+            session_key: "session-1".to_string(),
+            message: "hello".to_string(),
+            attachments: Vec::new(),
+        };
+        let err = forward_chat_send_to_gateway(&state, &params)
+            .await
+            .expect_err("should fail when channel is closed");
+        assert!(err.contains("Failed to send to gateway"));
     }
 }
