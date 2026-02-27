@@ -1,6 +1,6 @@
 [package]
 name = "clawstation"
-version = "1.0.9"
+version = "1.0.10"
 description = "OpenClaw Desktop Client"
 authors = ["OpenClaw"]
 edition = "2021"
